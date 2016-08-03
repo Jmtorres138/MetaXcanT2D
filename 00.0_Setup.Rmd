@@ -1,0 +1,128 @@
+---
+title: "00.0_Setup.Rmd"
+author: "Jason Torres"
+date: "May 13, 2016"
+output: pdf_document
+---
+
+The purpose of this script is to determine - for each tissue model - which genes have prediction FDR $\leq 0.05$. All subsequent results will be based on genes \textbf{meeting this threshold}. This is a **model-level** correction that ensures that all genes analyzed meet a minimum standard of prediction quality. The requisite prediction information files are on tarbell:  `/group/im-lab/nas40t2/jason/projects/MetaXcan/db_files/gtex/alpha_1/allResults` 
+
+Load libraries and set paths 
+```{r setup, echo=FALSE}
+
+library("data.table")
+library("dplyr")
+library("reshape")
+library("qvalue")
+"%&%" <- function(a,b) paste0(a,b)
+
+home.dir <- "/Users/jtorres/Google Drive/Projects/" %&% 
+  "MetaXcan/DIAGRAM-T2D-version3/"
+model.dir <- "/Volumes/im-lab/nas40t2/jason/projects/" %&% 
+  "MetaXcan/db_files/gtex/alpha_1/allResults/"
+results.dir <- "/Volumes/im-lab/nas40t2/jason/projects/MetaXcan/results/"
+temp.dir <- home.dir %&% "temp/" 
+dir.create(temp.dir)
+
+
+```
+
+
+Create FDR $\leq 0.05$ temporary files 
+```{r fdr_filter, echo=FALSE}
+
+file.vec <- list.files(model.dir)
+index1 <- grep("CrossTissue",file.vec)
+index2 <- grep("TW",file.vec)
+index <- c(index1,index2)
+file.vec <- file.vec[index]
+
+fdr_filter <- function(fdr=0.05){
+  record.df <- c()
+  for (f in file.vec){
+    mod <- gsub(".allResults.txt.gz","",f)
+    print(mod)
+    df <- fread("cat " %&% model.dir %&% f %&% " | zmore")
+    pvec <- df$pval
+    qval <- qvalue(pvec)$qvalues
+    df <- cbind(df,qval)
+    sub.df <- filter(df,qval<=fdr) %>% select(one_of("gene","genename"))
+    out.name <- temp.dir %&% mod %&% ".fdr" %&% fdr %&% ".temp.txt"
+    write.table(sub.df,file=out.name,quote=FALSE,sep="\t",row.names=FALSE)
+    total <- dim(df)[1]; retain <- dim(sub.df)[1]; prop <- retain/total
+    vec <- c(mod,total,retain,prop)
+    record.df <- rbind(record.df,vec)
+  }
+  record.df <- as.data.frame(record.df,stringsAsFactors=FALSE)
+  names(record.df) <- c("model","total","retained","prop")
+  record.df$model <- as.character(record.df$model)
+  record.df$total <- as.numeric(record.df$total)
+  record.df$retained <- as.numeric(record.df$retained)
+  record.df$prop <- as.numeric(record.df$prop)
+  
+  rec.name <- temp.dir %&% "model-record-fdr" %&% fdr %&% ".txt"
+  write.table(record.df,file=rec.name,quote=FALSE,sep="\t",row.names=FALSE)
+  print(hist(record.df$prop,breaks=10))
+}
+
+```
+
+
+Subset \textbf{MetaXcan} results (on tarbell) to include only genes that meet the FDR $\leq 0.05$ threshold above in each respective tissue. 
+```{r subset_write, echo=FALSE}
+
+model.vec <- gsub(".allResults.txt.gz","",file.vec)
+
+subset_write <- function(fdr=0.05,analysis="DIAGRAM3"){
+  #analysis can be DIAGRAM3 or GERA-T2D
+  res1.dir <- results.dir %&% analysis %&% "/alpha_1/"
+  res2.dir <- results.dir %&% analysis %&% "/alpha_1_predictFDR" %&% fdr %&% "/"
+  dir.create(res2.dir)
+  for (mod in model.vec){
+    print(mod)
+    df1 <- fread(res1.dir %&% mod %&% ".zscores.csv")
+    temp.file <- temp.dir %&% mod %&% ".fdr" %&% fdr %&% ".temp.txt"
+    df2 <- fread(temp.file)
+    df3 <- filter(df1,gene_name %in% df2$genename)
+    write.table(df3,file=res2.dir %&% mod %&% ".zscores.csv",sep=",",quote=FALSE,row.names=FALSE)
+    unlink(temp.file)
+  }
+}
+
+fdr_filter(0.05)
+fdr_filter(0.10)
+subset_write(fdr=0.05,analysis="DIAGRAM3")
+subset_write(fdr=0.10,analysis="DIAGRAM3")
+fdr_filter(0.05)
+fdr_filter(0.10)
+subset_write(fdr=0.05,analysis="GERA-T2D")
+subset_write(fdr=0.10,analysis="GERA-T2D")
+```
+
+
+
+Subset \textbf{MetaXcan} results (on tarbell) to include only genes that meet the FDR $\leq 0.05$ threshold above in each respective tissue - this is for the **META-ANALYSIS OF DIAGRAM AND GERA**  
+```{r subset_write_meta, echo=FALSE}
+
+subset_write_meta <- function(fdr=0.05){
+  res1.dir <- results.dir %&%  "meta-analyses/DIAGRAM-GERA/alpha_1/"
+  res2.dir <- results.dir %&%  "meta-analyses/DIAGRAM-GERA/alpha_1_predictFDR" %&% fdr %&% "/"
+  dir.create(res2.dir)
+  for (mod in model.vec){
+    print(mod)
+    df1 <- fread(res1.dir %&% mod %&% ".meta.txt")
+    temp.file <- temp.dir %&% mod %&% ".fdr" %&% fdr %&% ".temp.txt"
+    df2 <- fread(temp.file)
+    df3 <- filter(df1,Gene %in% df2$genename)
+    write.table(df3,file=res2.dir %&% mod %&% ".meta.txt",sep="\t",quote=FALSE,row.names=FALSE)
+    unlink(temp.file)
+  }
+}
+
+fdr_filter(0.05)
+fdr_filter(0.10)
+subset_write_meta(fdr=0.05)
+subset_write_meta(fdr=0.10)
+```
+
+
