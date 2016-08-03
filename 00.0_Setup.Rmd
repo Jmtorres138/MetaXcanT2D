@@ -73,7 +73,7 @@ Subset \textbf{MetaXcan} results (on tarbell) to include only genes that meet th
 
 model.vec <- gsub(".allResults.txt.gz","",file.vec)
 
-subset_write <- function(fdr=0.05,analysis="DIAGRAM3"){
+subset_write <- function(fdr=0.05,analysis="DIAGRAM3_ImpG_0.80"){
   #analysis can be DIAGRAM3 or GERA-T2D
   res1.dir <- results.dir %&% analysis %&% "/alpha_1/"
   res2.dir <- results.dir %&% analysis %&% "/alpha_1_predictFDR" %&% fdr %&% "/"
@@ -90,13 +90,13 @@ subset_write <- function(fdr=0.05,analysis="DIAGRAM3"){
 }
 
 fdr_filter(0.05)
-fdr_filter(0.10)
-subset_write(fdr=0.05,analysis="DIAGRAM3")
-subset_write(fdr=0.10,analysis="DIAGRAM3")
+#fdr_filter(0.10)
+subset_write(fdr=0.05,analysis="DIAGRAM3_ImpG_0.80")
+#subset_write(fdr=0.10,analysis="DIAGRAM3_ImpG_0.80")
 fdr_filter(0.05)
-fdr_filter(0.10)
-subset_write(fdr=0.05,analysis="GERA-T2D")
-subset_write(fdr=0.10,analysis="GERA-T2D")
+#fdr_filter(0.10)
+subset_write(fdr=0.05,analysis="GERA-T2D_ImpG_0.80")
+#subset_write(fdr=0.10,analysis="GERA-T2D_ImpG_0.80")
 ```
 
 
@@ -106,7 +106,10 @@ Subset \textbf{MetaXcan} results (on tarbell) to include only genes that meet th
 
 subset_write_meta <- function(fdr=0.05){
   res1.dir <- results.dir %&%  "meta-analyses/DIAGRAM-GERA/alpha_1/"
-  res2.dir <- results.dir %&%  "meta-analyses/DIAGRAM-GERA/alpha_1_predictFDR" %&% fdr %&% "/"
+  res2.dir <- results.dir %&%  "meta-analyses/DIAGRAM-GERA_ImpG_0.80/"
+  dir.create(res2.dir)  
+#  res2.dir <- res2.dir %&%  "meta-analyses/DIAGRAM-GERA/alpha_1_predictFDR" %&% fdr %&% "/"
+  res2.dir <- res2.dir %&%  "alpha_1_predictFDR" %&% fdr %&% "/"
   dir.create(res2.dir)
   for (mod in model.vec){
     print(mod)
@@ -120,9 +123,9 @@ subset_write_meta <- function(fdr=0.05){
 }
 
 fdr_filter(0.05)
-fdr_filter(0.10)
+#fdr_filter(0.10)
 subset_write_meta(fdr=0.05)
-subset_write_meta(fdr=0.10)
+#subset_write_meta(fdr=0.10)
 ```
 
 
