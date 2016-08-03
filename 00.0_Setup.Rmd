@@ -1,7 +1,7 @@
 ---
 title: "00.0_Setup.Rmd"
 author: "Jason Torres"
-date: "May 13, 2016"
+date: "August 3, 2016"
 output: pdf_document
 ---
 
@@ -17,7 +17,7 @@ library("qvalue")
 "%&%" <- function(a,b) paste0(a,b)
 
 home.dir <- "/Users/jtorres/Google Drive/Projects/" %&% 
-  "MetaXcan/DIAGRAM-T2D-version3/"
+  "MetaXcan/MetaXcanT2D/"
 model.dir <- "/Volumes/im-lab/nas40t2/jason/projects/" %&% 
   "MetaXcan/db_files/gtex/alpha_1/allResults/"
 results.dir <- "/Volumes/im-lab/nas40t2/jason/projects/MetaXcan/results/"
