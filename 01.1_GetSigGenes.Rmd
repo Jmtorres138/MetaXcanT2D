@@ -1,0 +1,160 @@
+---
+title: "01.1_GetSigGenes.Rmd"
+author: "Jason Torres"
+date: "August 4, 2016"
+output:
+  pdf_document:
+    toc: yes
+  html_document:
+    fig_caption: yes
+    highlight: textmate
+    number_sections: yes
+    theme: journal
+    toc: yes
+---
+
+# Set-up project 
+
+```{r setup, echo=FALSE}
+library("data.table")
+library("dplyr")
+library("ggplot2")
+#source("http://bioconductor.org/biocLite.R")
+#biocLite("qvalue")
+library("qvalue")
+"%&%" <- function(a,b) paste0(a,b) 
+root.dir <- "/Volumes/im-lab/nas40t2/jason/projects/MetaXcan/results/"
+```
+
+# Functions for Getting Bonferroni and FDR 5%-significant Gene Sets 
+
+```{r sigfunct, echo=FALSE}
+
+get.bonfer.genes <- function(file.vec){
+  top.vec <- c() 
+  for (file in file.vec){
+    result.file <- res.dir %&% file
+    res.df <- fread(result.file) %>% tbl_df %>% arrange(pvalue)
+    # Alternative approach but not necessary 
+    #res.df <- fread(result.file) %>% tbl_df %>% mutate(pval = 2 * pnorm(-abs(zscore))) %>% arrange(pval)
+    alpha <- 0.05
+    bonfer <- alpha / dim(res.df)[1]
+    bonfer.df <- res.df %>% filter(pvalue < bonfer)
+    top.vec <- append(top.vec,bonfer.df$gene_name)
+  }
+  return(top.vec)
+}
+
+get.fdr.genes <- function(file.vec){
+  top.vec <- c() 
+  for (file in file.vec){
+    result.file <- res.dir %&% file
+    result.df <- fread(result.file)
+    df <- na.omit(result.df) 
+    qval <- qvalue(df$pvalue)$qvalues 
+    df <- cbind(df,qval)
+    fdr <- 0.05
+    fdr.df <- df %>% filter(qval < fdr) %>% arrange(qval)
+    top.vec <- append(top.vec,fdr.df$gene_name)
+  }
+  return(top.vec) 
+}
+```
+
+# Partitioning Top Gene Sets 
+
+```{r top_gene_partitioning, echo=FALSE,fig.height=8,fig.weight=2}
+t2d.loci.df <- fread("/Volumes/im-lab/nas40t2/jason/projects/MetaXcan/results/t2d-gene-info.txt")
+
+t2d.loci.genes <- unique(t2d.loci.df$nearby.gene)
+reported.genes <- unique(t2d.loci.df$reported.gene) 
+t2d.loci.genes.unknown <- setdiff(t2d.loci.genes,reported.genes)
+
+gene.partition <- function(gene.vec,criteria.name){
+  # criteria.name should be "Bonferonni" or "FDR05"
+  known.genes <- intersect(gene.vec,reported.genes)
+  known.set <- rep("T2D.Gene",length(known.genes))
+  df1 <- data.frame(known.genes,known.set)
+  names(df1) <- c("Gene","Type")
+  known.loci.genes <- intersect(gene.vec,t2d.loci.genes.unknown)
+  known.loci.set <- rep("Known.Region",length(known.loci.genes))
+  df2 <- data.frame(known.loci.genes,known.loci.set)
+  names(df2) <- c("Gene","Type")
+  new.loci.genes <- setdiff(gene.vec,c(known.genes,known.loci.genes))
+  new.loci.set <- rep("Unknown",length(new.loci.genes))
+  df3 <- data.frame(new.loci.genes,new.loci.set)
+  names(df3) <- c("Gene","Type")
+  df <- rbind(df1,df2,df3)
+  Criteria <- rep(criteria.name,length(dim(df)[1]))
+  df <- cbind(df,Criteria)
+  return(df)
+}
+
+make.partition.plot <- function(alpha){
+  b.df <- gene.partition(bonfer.genes,"Bonferonni")
+  f.df <- gene.partition(fdr.genes,"FDR.05")
+  df <- rbind(b.df,f.df)
+  plt <- ggplot(data=df,aes(x=Criteria)) +
+    geom_bar(aes(fill=Type),color="black") +
+    scale_fill_brewer() + ylab("Count") + 
+    xlab("Gene Set") + 
+    ggtitle("Composition of MetaXcan-significant Gene Sets") +
+    theme(plot.title = element_text(face="bold",size=20),
+          axis.title.x = element_text(face="bold"),
+          axis.title.y = element_text(face="bold")) +
+    theme_bw()
+  df2 <- filter(df,Criteria=="FDR.05"); df1 <- filter(df,Criteria=="Bonferonni")
+  df2 <- df2[!duplicated(df2),]; df1 <- df1[!duplicated(df1),]
+  if (alpha==1){
+    saveRDS(df1,paste0(rds.dir,"lasso_Bonferonni.RDS"))
+    saveRDS(df2,paste0(rds.dir,"lasso_FDR05.RDS"))
+  } else if (alpha==0.5){
+    saveRDS(df1,paste0(rds.dir,"elasticNet_Bonferonni.RDS"))
+    saveRDS(df2,paste0(rds.dir,"elasticNet_FDR05.RDS"))    
+  } else {
+    print("Alpha should be either 0.5 or 1")
+  }
+  print("###### Bonferonni-Significant ########")
+  print(filter(df1,Type=="T2D.Gene")$Gene)
+  print(filter(df1,Type=="Known.Region")$Gene)
+  print(filter(df1,Type=="Unknown")$Gene)
+  print("###### FDR05-Significant ########")
+  print(filter(df2,Type=="T2D.Gene")$Gene)
+  print(filter(df2,Type=="Known.Region")$Gene)
+  print(filter(df2,Type=="Unknown")$Gene)
+  plt
+}
+```
+
+# DIAGRAM3 Analyses 
+
+```{r diag3, echo=FALSE}
+rds.root.dir <- "/Users/jtorres/Google Drive/Projects/MetaXcan/MetaXcanT2D/RDS/"
+dir.create(rds.root.dir)
+
+rds.dir <- rds.root.dir %&% "diag3/"
+dir.create(rds.dir)
+
+
+res.dir <- root.dir %&% "DIAGRAM3_ImpG_0.80/alpha_1_predictFDR0.05/"
+file.vec <- list.files(res.dir,pattern="TW")
+file.vec <- append(file.vec,list.files(res.dir,pattern="CrossTissue"))
+bonfer.genes <- unique(get.bonfer.genes(file.vec))
+fdr.genes <- unique(get.fdr.genes(file.vec))
+make.partition.plot(1)
+```
+
+# GERA Analyses 
+
+```{r gera, echo=FALSE}
+
+rds.dir <- rds.root.dir %&% "gera/"
+dir.create(rds.dir)
+
+res.dir <- root.dir %&% "GERA-T2D_ImpG_0.80/alpha_1_predictFDR0.05/"
+file.vec <- list.files(res.dir,pattern="TW")
+file.vec <- append(file.vec,list.files(res.dir,pattern="CrossTissue"))
+bonfer.genes <- unique(get.bonfer.genes(file.vec))
+fdr.genes <- unique(get.fdr.genes(file.vec))
+make.partition.plot(1)
+```
