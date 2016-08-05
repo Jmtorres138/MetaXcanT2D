@@ -422,6 +422,7 @@ save_metaXcan_bonfer_plots()
 
 #T2Dcore.df <- filter(process_core_df(),diag.bonfer==TRUE)
 T2Dcore.df <- filter(process_core_df())
+T2Dcore.df <- process_core_df()
 saveRDS(T2Dcore.df,file=rds.dir %&% "T2Dcore.df.RDS")
 
 ```

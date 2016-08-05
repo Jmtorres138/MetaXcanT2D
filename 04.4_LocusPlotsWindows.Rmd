@@ -1,0 +1,466 @@
+---
+title: "04.4_LocusPlotsWindows.Rmd"
+author: "Jason Torres"
+date: "August 5, 2016"
+output:
+  pdf_document:
+    toc: yes
+  html_document:
+    fig_caption: yes
+    highlight: textmate
+    number_sections: yes
+    theme: journal
+    toc: yes
+---
+
+```{r setup, echo=FALSE}
+
+library("ggplot2")
+library("dplyr")
+library("ggrepel")
+library("gridExtra")
+library("cowplot")
+
+"%&%" <- function(a,b) paste0(a,b)
+
+root.dir <- "/Users/jtorres/Google Drive/Projects/MetaXcan/MetaXcanT2D/" 
+rds.dir <- root.dir %&% "RDS/"
+pdf.dir <- "/Users/jtorres/Google Drive/Projects/MetaXcan/" %&% 
+  "MetaXcanT2D/figures/locusPlots/"
+dir.create(pdf.dir)
+loci.df <- readRDS("/Users/jtorres/Google Drive/Projects/MetaXcan/" %&% 
+                "MetaXcanT2D/RDS/loci.df.RDS")
+msig.loci.df <- readRDS(file=rds.dir%&%"msig.loci.df.RDS")
+
+```
+
+
+```{r process_functions, echo=FALSE}
+
+append_locus_id <- function(){
+  loci.df <- readRDS("/Users/jtorres/Google Drive/Projects/MetaXcan/" %&% 
+                  "MetaXcanT2D/RDS/loci.df.RDS")
+  locus <- c()
+  for (r.gene in loci.df$reported.gene){
+    temp.df <- msig.loci.df[grepl(r.gene,msig.loci.df$locus.rep.genes),]
+    l <- temp.df$locus
+    locus <- append(locus,l)  
+  }
+  out.df <- cbind(locus,loci.df)
+  return(out.df)
+}
+
+locus.subset <- function(locnum){
+  loci.df <- append_locus_id()
+  df <- arrange(loci.df, nearby.txstart) %>% 
+    filter(locus==locnum) %>%   select(-contains("length"), -contains("locus"),
+                                                 -contains("tx"),-starts_with("win"))
+  chrom <- df$chrom[1]; snp <- df$most.sig.snp[1]; repgene <- df$reported.gene[1]
+  df <- select(df,nearby.gene:CrossTissue); names(df) <- gsub("TW_","",names(df))
+  names(df) <- gsub("TS_","",names(df)); names(df) <- gsub("Organ_","",names(df))
+  return(df)
+}
+
+get_bonfer_mult_locus <- function(locnum){
+  load("RDS/diag3/metaXcan.results.Rdata")
+  l.df <- as.data.frame(locus.subset(locnum),stringsAsFactors=FALSE)
+  #vec <- na.omit(as.numeric(as.matrix(l.df)))
+  #val <- 0.05/length(vec)
+  #return(val)
+  gene.vec <- unique(l.df$nearby.gene)
+  temp.df <- filter(p.L.df,Gene %in% gene.vec)
+  p.thresh <- 0.05 / length(na.omit(as.numeric(as.matrix(temp.df[,2:dim(temp.df)[2]]))))
+  return (p.thresh)
+}
+
+make.locus.epacts <- function(locnum,type="TW"){
+  loci.df <- append_locus_id()
+  ncols <- dim(loci.df)[2]
+  first.tis.pos <- match("nearby.txend",names(loci.df)) + 1 
+  tiss.range <- length(first.tis.pos:ncols)
+  part1.df <- filter(loci.df,locus==locnum) %>% ### NEED TO MODIFY 
+    select(CHROM=chrom,BEGIN=nearby.txstart,END=nearby.txend,MARKER_ID=nearby.gene)
+  t.df <- data.frame()
+  for (i in 1:tiss.range){
+    t.df <- rbind(t.df,part1.df)
+  }
+  part1.df <- t.df
+  part2.df <- filter(loci.df,locus==locnum)
+  part2.df <- part2.df[,first.tis.pos:ncols]
+  z.vec <- c()
+  r <- dim(part2.df)[1]; c <- dim(part2.df)[2]
+  for (j in 1:c){
+    for (i in 1:r){
+      z.vec <- append(z.vec,as.numeric(part2.df[i,j]))
+    }
+  }
+  ZSCORE <- z.vec
+  PVALUE <- 2*pnorm(-abs(z.vec))
+  if (type == "TW") {
+    TISSUE <- rep(gsub("TW_", "",names(loci.df)[first.tis.pos:ncols]),each=r)
+  } else if (type == "Organ"){
+    TISSUE <- rep(gsub("Organ_", "",names(loci.df)[first.tis.pos:ncols]),each=r)
+  } else {
+    TISSUE <- rep(gsub("TS_", "",names(loci.df)[first.tis.pos:ncols]),each=r)
+  }
+  epacts.df <- cbind(part1.df,ZSCORE,PVALUE,TISSUE)  
+  names(epacts.df)[1] <- "#" %&% names(epacts.df)[1]
+  epacts.df <- na.omit(epacts.df)
+  #savename <- pdf.save.dir %&% "/temp.epacts.txt"
+  #write.table(epacts.df,savename,quote=FALSE,sep="\t",row.names=FALSE)
+  return(epacts.df)
+}
+
+get_bonfer_sig <- function(){
+  load("RDS/diag3/metaXcan.results.Rdata")
+  p.df <- p.L.df
+  p.df <- cbind(select(p.df,one_of("Gene","CrossTissue")),
+                select(p.df,contains("TW_")))
+  vec <- c()
+  for (c in 2:dim(p.df)[2]){
+    col.vec <- na.omit(p.df[,c])
+    #print(length(col.vec))
+    vec <- append(vec,col.vec)
+  }
+  bonfer <- 0.05 / length(vec)
+  return(bonfer)
+}
+
+bonfer <- get_bonfer_sig()
+
+```
+
+
+```{r locus_plot_function, echo=FALSE}
+
+locus_plot <- function(locnum){#genename){
+#  df <- make.locus.epacts(genename) ## Need to modify 
+  df <- make.locus.epacts(locnum) ## Need to modify 
+  multsig.genes <- c()
+  multsig.zscores <- c() 
+  sig.genes <- c()
+  sig.zscores <- c()
+  locsig.genes <- c()
+  locsig.zscores <- c() 
+  nonsig.genes <- c()
+  #bonfer.locus <- get_bonfer_mult_locus(genename) # Need to modify 
+  bonfer.locus <- get_bonfer_mult_locus(locnum) # Need to modify 
+  for (i in 1:length(df$PVALUE)){
+    pval <- df$PVALUE[i]
+    gene <- df$MARKER_ID[i]
+    zscore <- df$ZSCORE[i]
+    if (pval <= bonfer){
+      multsig.genes <- append(multsig.genes,gene)
+      multsig.zscores <- append(multsig.zscores,zscore)
+    } else if (pval <= 0.05/10000){
+      sig.genes <- append(sig.genes,gene)
+      sig.zscores <- append(sig.zscores,zscore)
+    } else if (pval <= bonfer.locus){
+      locsig.genes <- append(locsig.genes,gene)
+      locsig.zscores <- append(locsig.zscores,zscore)      
+    } else {
+      nonsig.genes <- append(nonsig.genes,gene)
+    }
+  }
+  multsig.df <- as.data.frame(cbind(multsig.genes,multsig.zscores),
+                              stringsAsFactors=FALSE) 
+  multsig.df$multsig.zscores <- as.numeric(multsig.zscores)
+  sig.df <- as.data.frame(cbind(sig.genes,sig.zscores),
+                              stringsAsFactors=FALSE) 
+  sig.df$sig.zscores <- as.numeric(sig.zscores)
+  locsig.df <- as.data.frame(cbind(locsig.genes,locsig.zscores),
+                              stringsAsFactors=FALSE) 
+  locsig.df$locsig.zscores <- as.numeric(locsig.zscores)
+  keep.multsig.genes <- c()
+  keep.multsig.zscores <- c() 
+  for (gene in unique(multsig.df$multsig.genes)){
+    temp.df <- filter(multsig.df,multsig.genes==gene)
+    highest <- max(abs(temp.df$multsig.zscores))
+    #z <- temp.df$multsig.zscores[grep(as.character(highest),as.character(temp.df$multsig.zscores))]
+    z <- temp.df$multsig.zscores[grep(as.character(highest),as.character(temp.df$multsig.zscores))][1]
+    keep.multsig.genes <- append(keep.multsig.genes,gene)
+    keep.multsig.zscores <- append(keep.multsig.zscores,z)
+  }
+  keep.sig.genes <- c()
+  keep.sig.zscores <- c() 
+  for (gene in unique(sig.df$sig.genes)){
+    temp.df <- filter(sig.df,sig.genes==gene)
+    highest <- max(abs(temp.df$sig.zscores))
+    #z <- temp.df$sig.zscores[grep(as.character(highest),as.character(temp.df$sig.zscores))]
+    z <- temp.df$sig.zscores[grep(as.character(highest),as.character(temp.df$sig.zscores))][1]
+    keep.sig.genes <- append(keep.sig.genes,gene)
+    keep.sig.zscores <- append(keep.sig.zscores,z)
+  }
+  keep.locsig.genes <- c()
+  keep.locsig.zscores <- c() 
+  for (gene in unique(locsig.df$locsig.genes)){
+    temp.df <- filter(locsig.df,locsig.genes==gene)
+    highest <- max(abs(temp.df$locsig.zscores))
+#    z <- temp.df$locsig.zscores[grep(as.character(highest),as.character(temp.df$locsig.zscores))]
+    z <- temp.df$locsig.zscores[grep(as.character(highest),as.character(temp.df$locsig.zscores))][1]
+    keep.locsig.genes <- append(keep.locsig.genes,gene)
+    keep.locsig.zscores <- append(keep.locsig.zscores,z)
+  }
+  chrom <- df[1,1]
+  mylimit <- ceiling(max(abs(min(df$ZSCORE)),abs(max(df$ZSCORE))))
+  lab.df <- select(df,BEGIN,MARKER_ID)
+  lab.df <- lab.df[!duplicated(lab.df),]
+  lab.df <- arrange(lab.df,BEGIN)
+  locstart <- filter(msig.loci.df,locus==locnum)$locus.start
+  locend <- filter(msig.loci.df,locus==locnum)$locus.end
+  # xdistance <- (max(df$BEGIN) - min(df$BEGIN))/1000000 
+  xdistance <- (locend - locstart)/1000000 
+  ydistance <- ceiling(max(-log(df$PVALUE,base=10)))
+  #my.x.lim <- xdistance/10
+  my.x.lim <- xdistance/10
+  my.y.lim <- ydistance/10
+#  my.x.max <- ceiling(max(df$BEGIN/1000000)+my.x.lim)
+  my.x.max <- ceiling(locend/1000000+my.x.lim)
+#  my.x.min <- floor(min(df$BEGIN/1000000)-my.x.lim)
+  my.x.min <- floor(locstart/1000000-my.x.lim)
+  my.y.max <- ceiling(ydistance + my.y.lim)
+  ypos <- -(ydistance/2) 
+  my.y.min <- floor(ypos * 1.5)
+  YPOS <- rep(ypos,length(lab.df$BEGIN))
+  YPOS <- rep(c(my.y.min*1/10,my.y.min*2/10,my.y.min*3/10,
+                my.y.min*4/10,my.y.min*5/10,my.y.min*6/10,
+                my.y.min*7/10,my.y.min*8/10,my.y.min*9/10),
+                 length(YPOS))[1:length(YPOS)]
+  lab.df <- cbind(lab.df,YPOS)
+  Lab.Fill <- c()
+  for (i in 1:length(lab.df$MARKER_ID)){
+    gene <- lab.df$MARKER_ID[i]
+    if (gene %in% keep.multsig.genes){
+      z <- keep.multsig.zscores[grep(gene,keep.multsig.genes)]
+      if (z > 0){
+        Lab.Fill <- append(Lab.Fill,"green1")
+      } else{
+        #Lab.Fill <- append(Lab.Fill,"firebrick1")
+        Lab.Fill <- append(Lab.Fill,"dodgerblue1")
+      } 
+    } else if (gene %in% keep.sig.genes){
+      z <- keep.sig.zscores[grep(gene,keep.sig.genes)]
+      if (z > 0){
+        #Lab.Fill <- append(Lab.Fill,"greenyellow")
+        Lab.Fill <- append(Lab.Fill,"green2")
+
+      } else{
+        #Lab.Fill <- append(Lab.Fill,"indianred1")
+        Lab.Fill <- append(Lab.Fill,"dodgerblue2")
+      }  
+    } else if (gene %in% keep.locsig.genes){
+      z <- keep.locsig.zscores[grep(gene,keep.locsig.genes)]
+      if (z > 0){
+        Lab.Fill <- append(Lab.Fill,"green3")
+      } else{
+        #Lab.Fill <- append(Lab.Fill,"lightsalmon1")
+        Lab.Fill <- append(Lab.Fill,"dodgerblue3")
+      }      
+    } else{
+      Lab.Fill <- append(Lab.Fill,"ghostwhite")
+    }
+  }
+  lab.df <- cbind(lab.df,Lab.Fill)
+  #lab.df$Lab.Fill <- as.character(lab.df$Lab.Fill)
+  myseq <- length(seq(0,my.y.max,by=1))
+  if (myseq < 10){
+    BY = 1
+  } else if (myseq >= 10 & myseq <= 20){
+    BY = 2
+  } else{
+    BY = 5 
+  }
+  title <- gsub(",",", ",as.character(filter(msig.loci.df,locus==locnum)$locus.rep.genes))
+  plt <- ggplot(data=df,aes(x=BEGIN/1000000,y=-log(PVALUE,base=10))) + 
+    geom_hline(yintercept=0,color="grey",size=2) + 
+    #geom_hline(yintercept=-log(0.05/10000,base=10),linetype=2) + 
+    geom_hline(yintercept=-log(get_bonfer_mult_locus(locnum),base=10),linetype=3) + 
+    coord_cartesian(xlim=c(my.x.min,my.x.max),
+                    ylim=c(my.y.min,my.y.max),expand=FALSE) +
+    annotate("rect",xmin=my.x.min,xmax=my.x.max,
+             ymin=my.y.min,ymax = 0,fill="grey") + 
+    geom_point(shape=21,size=1.5,color="black",aes(fill=ZSCORE)) + 
+    #geom_label(data=lab.df,
+    #  aes(label=MARKER_ID,x=BEGIN/1000000,y=YPOS),fill=lab.df$Lab.Fill,label.size=0.3,
+    # size=1.75) + 
+    geom_label(data=lab.df,
+      aes(label=MARKER_ID,x=BEGIN/1000000,y=YPOS),fill=lab.df$Lab.Fill,label.size=0.2,
+      size=3) + 
+    geom_hline(yintercept=-log(bonfer,base=10)) + 
+    #geom_label_repel(data=lab.df,
+    #                 aes(x=BEGIN/1000000,y=YPOS,label=MARKER_ID),
+    #                 label.size=0.25,size=2.5) + 
+    #scale_fill_continuous("Z-score",low="firebrick1",
+    #                      high="green2",limits=c(-mylimit,mylimit)) + 
+    scale_fill_continuous("Z-score",low="dodgerblue1",
+                          high="green1",limits=c(-mylimit,mylimit)) + 
+    scale_y_continuous(breaks=seq(0,my.y.max,by=BY)) + 
+    xlab("Position on Chromosome " %&% chrom %&% " (Mb)") + 
+    ylab(expression(paste("-log"[10],"(p-value)"))) + 
+    ggtitle(title) + 
+    theme_bw() + 
+    theme(axis.title.x=element_text(size=11,face="bold"),
+          axis.title.y=element_text(size=11,face="bold"),
+          plot.title=element_text(size=14,face="bold.italic"),
+          axis.text=element_text(size=10),
+          legend.title=element_text(face="bold",size=10),
+          panel.grid.major=element_line(color="ghostwhite"),
+          legend.key.size = unit(0.50, "cm"),
+          legend.text=element_text(size=10));plt #,
+          #legend.background=element_rect(fill="lightblue1"),
+          #plot.background=element_rect(color="grey",linetype=1));plt
+  return(plt)
+}
+
+```
+
+```{r save_functs, echo=FALSE}
+
+save_plot <- function(locnum){
+  plt <- locus_plot(locnum)  
+  savename <- pdf.dir %&% "locus." %&% locnum %&% ".pdf"
+  ggsave(plt,filename=savename,width=7,height=5)
+}
+
+locus_4array_plot <- function(locvector,mytitle){
+  # Locu Plot grid array with 4 panels 
+  plot.list <- list()
+  for (i in 1:length(locvector)){
+    loc <- locvector[i]
+    plt <- locus_plot(loc)
+    plot.list[[i]] <- plt
+  }
+  if (length(plot.list) == 1){
+    grid.plt <- ggdraw() + 
+      draw_plot(plot.list[[1]],0,.5,.5,.5) +
+      draw_plot_label(c("A"),c(0),c(1),size=17)
+  } else if (length(plot.list) == 2){
+    grid.plt <- ggdraw() + 
+      draw_plot(plot.list[[1]],0,.5,.5,.5) +
+      draw_plot(plot.list[[2]],.5,.5,.5,.5) + 
+      draw_plot_label(c("A","B"),c(0,.5),c(1,1),size=17)
+  } else if (length(plot.list) == 3){
+    grid.plt <- ggdraw() + 
+      draw_plot(plot.list[[1]],0,.5,.5,.5) +
+      draw_plot(plot.list[[2]],.5,.5,.5,.5) + 
+      draw_plot(plot.list[[3]],0,0,.5,.5) + 
+      draw_plot_label(c("A","B","C"),c(0,.5,0),c(1,1,.5),size=17)  
+  } else if (length(plot.list) == 4){
+    grid.plt <- ggdraw() + 
+      draw_plot(plot.list[[1]],0,.5,.5,.5) +
+      draw_plot(plot.list[[2]],.5,.5,.5,.5) + 
+      draw_plot(plot.list[[3]],0,0,.5,.5) + 
+      draw_plot(plot.list[[4]],.5,0,.5,.5) + 
+      draw_plot_label(c("A","B","C","D"),c(0,.5,0,.5),c(1,1,.5,.5),size=17)
+    
+  } else {
+    stop("Can not have more than four panels in grid plot!")
+  }
+  savename <- pdf.dir %&% mytitle %&% ".pdf"
+  ggsave(grid.plt,filename=savename,width=14,height=10)
+  grid.plt
+}
+
+locus_6array_plot_upper <- function(locvector,mytitle,set.letter="A"){
+  # Locu Plot grid array with 6 panels 
+  plot.list <- list()
+  for (i in 1:length(locvector)){
+    loc <- locvector[i]
+    plt <- locus_plot(loc)
+    plot.list[[i]] <- plt
+  }
+  if (length(plot.list) == 1){
+    grid.plt <- plot_grid(plot.list[[1]],labels=c("A"),nrow=3,ncol=2)    
+  } else if (length(plot.list) == 2){
+    grid.plt <- plot_grid(plot.list[[1]],plot.list[[2]],
+                          labels=paste0(set.letter,c("A","B")),nrow=3,ncol=2)    
+  } else if (length(plot.list) == 3){
+    grid.plt <- plot_grid(plot.list[[1]],plot.list[[2]],
+                 plot.list[[3]],labels=paste0(set.letter,c("A","B","C")),nrow=3,ncol=2)   
+  } else if (length(plot.list) == 4){
+    grid.plt <- plot_grid(plot.list[[1]],plot.list[[2]],
+                            plot.list[[3]],plot.list[[4]],
+                            labels=paste0(set.letter,c("A","B","C","D")),
+                          nrow=3,ncol=2)
+  } else if (length(plot.list) == 5){
+    grid.plt <- plot_grid(plot.list[[1]],plot.list[[2]],
+                            plot.list[[3]],plot.list[[4]],plot.list[[5]],
+                           labels=paste0(set.letter,c("A","B","C","D","E")),
+                          nrow=3,ncol=2)
+  } else if (length(plot.list) == 6){
+    grid.plt <- plot_grid(plot.list[[1]],plot.list[[2]],
+                            plot.list[[3]],plot.list[[4]],
+                            plot.list[[5]],plot.list[[6]],
+                       labels=paste0(set.letter,c("A","B","C","D","E","F")),
+                       nrow=3,ncol=2)
+  } else {
+    stop("Can not have more than six panels in grid plot!")
+  }
+  savename <- pdf.dir %&% mytitle %&% ".pdf"
+  ggsave(grid.plt,filename=savename,width=15,height=15)
+  grid.plt
+}
+
+```
+
+
+
+```{r save_plots, echo=FALSE}
+
+save_locus_arrays <- function(){
+  loci.df <- append_locus_id()
+  track.df <- select(loci.df,one_of("locus","chrom")) %>% arrange(locus)
+  track.df <- track.df[!duplicated(track.df),]
+  locvector <- track.df$locus
+  num <- length(locvector); interval <- 6
+  numsects <- ceiling(num / interval)
+  start <- 1
+  start.val <- c(start)
+  end.val <- c(start+(interval-1))
+  for (i in 1:numsects){
+    #print(c(start.val,end.val))
+    lett <- toupper(letters)[i]
+    print("Generating grid plot " %&% i %&% " of " %&% numsects)
+    locus_6array_plot_upper(locvector[start.val:end.val],
+                      "locusPlot" %&% i,set.letter=lett) 
+    start.val <- start.val + (interval)
+    if ((end.val + interval) <= num){
+      end.val <- end.val + (interval)
+    } else{
+      end.val <- num
+    }
+  }  
+}
+
+save_locus_arrays()
+
+```
+
+
+
+```{r write_groups, echo=FALSE}
+
+# group1
+filter(msig.loci.df,group==1)$locus
+filter(msig.loci.df,group==3)$locus
+# 6 12 23 27 36 37 51 53 56 
+# 34
+locus_6array_plot_upper(c(6,12,23,27,36,37),"GROUP1.part1",set.letter = "")
+locus_6array_plot_upper(c(51,53,56,34),"GROUP1.part2",set.letter = "")
+
+# group 2
+filter(msig.loci.df,group==2)$locus
+# 5 10 17 18 19 21 22 26 33 39 40 42 44 48 52 55 57
+locus_6array_plot_upper(c(5,10,17,18,19,21),"GROUP2.part1",set.letter = "")
+locus_6array_plot_upper(c(22,26,33,39,40,42),"GROUP2.part2",set.letter = "")
+locus_6array_plot_upper(c(44,48,52,55,57),"GROUP2.part3",set.letter = "")
+
+# group 3
+filter(msig.loci.df,group==4)$locus
+# 1  7  9 11 14 20 28 38 47 50
+locus_6array_plot_upper(c(1,7,9,11,14,20),"GROUP3.part1",set.letter = "")
+locus_6array_plot_upper(c(28,38,47,50),"GROUP3.part2",set.letter = "")
+
+
+```
+

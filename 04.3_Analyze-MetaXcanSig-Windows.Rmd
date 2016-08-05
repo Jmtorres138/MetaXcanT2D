@@ -1,0 +1,288 @@
+---
+title: "04.3_Analyze-MetaXcanSig-Windows.Rmd"
+author: "Jason Torres"
+date: "August 5, 2016"
+output:
+  pdf_document:
+    toc: yes
+  html_document:
+    fig_caption: yes
+    highlight: textmate
+    number_sections: yes
+    theme: journal
+    toc: yes
+---
+
+```{r setup, echo=FALSE}
+
+library("dplyr")
+library("data.table")
+library("gridExtra")
+rds.dir <- "/Users/jtorres/Google Drive/Projects/MetaXcan/MetaXcanT2D/RDS/"
+
+"%&%" <- function(a,b) paste0(a,b)
+
+mtxn.sig.loci.df <- readRDS(file=rds.dir%&%"mtxn.sig.loci.df.RDS")
+
+```
+
+
+Note: Although **_CAMK1D_** is not a T2D gene based on annotation from the top 1000 DIAGRAM SNPs, it is listed as a T2D gene on the NHGRI-EBI catalogue, therefore I'll manually update the locus window annotations 
+
+```{r adjust_CAMK1D, echo=FALSE}
+
+mtxn.sig.loci.df$locus.rep.genes <- gsub("CDC123","CDC123,CAMK1D", mtxn.sig.loci.df$locus.rep.genes)
+saveRDS(mtxn.sig.loci.df,file=rds.dir%&%"mtxn.sig.loci.df.RDS")
+mtxn.sig.loci.df <- readRDS(file=rds.dir%&%"mtxn.sig.loci.df.RDS")
+
+```
+
+
+
+
+There are `r dim(mtxn.sig.loci.df)[1]` non-overlapping T2D loci, of which:
+
+`r length(na.omit(mtxn.sig.loci.df$mtxn.sig.uni.genes))` have genome-wide significant (across single model) MetaXcan associations 
+
+`r length(na.omit(mtxn.sig.loci.df$mtxn.sig.gw.genes))` have genome-wide significant (across all models) MetaXcan associations 
+
+`r length(na.omit(mtxn.sig.loci.df$mtxn.sig.lw.genes))` have locus-wide significant (across all models) MetaXcan associations 
+
+
+```{r assign_group_func, echo=FALSE}
+
+get_reported_genes <- function(){
+  reported.genes <- c()
+  for (i in 1:dim(mtxn.sig.loci.df)[1]){
+    g.vec <- strsplit(as.character(mtxn.sig.loci.df$locus.rep.genes[i]),",")[[1]]
+    reported.genes <- append(reported.genes,g.vec)
+  }
+  reported.genes <- unique(reported.genes)
+  return(reported.genes)
+}
+
+assign_group <- function(locnum){
+  r.genes <- get_reported_genes()
+  df <- filter(mtxn.sig.loci.df,locus==locnum)
+  locus.genes <- strsplit(df$locus.genes,",")[[1]]
+  gw.genes <- strsplit(as.character(df$mtxn.sig.gw.genes),",")[[1]]
+  gw.models <- strsplit(as.character(df$mtxn.sig.gw.models),",")[[1]]
+  lw.genes <- strsplit(as.character(df$mtxn.sig.lw.genes),",")[[1]]
+  lw.models <- gsub("TW_","",strsplit(as.character(df$mtxn.sig.lw.models),",")[[1]])
+  # Group 1: reported gene(s) are genome-wide significant 
+  # Group 2: reported gene(s) are locus-wide significant 
+  # Group 3: reported gene(s) are not significant; other gene(s) are genome-wide significant
+  # Group 4: reported gene(s) are not significant; other gene(s) are locus-wide significant 
+  if (sum(gw.genes %in% r.genes) > 0){
+    group <- "1"
+  } else if (sum(lw.genes %in% r.genes) > 0 ){
+    group <- "2"
+  } else if (!is.na(gw.genes)){
+    group <- "3"
+  } else if (all(is.na(gw.genes) & !is.na(lw.genes))){
+    group <- "4"
+  } else{
+    group <- NA 
+  }
+  #print(df)
+  return(group)
+}
+
+append_group <- function(){
+  group <- c()
+  for (i in 1:dim(mtxn.sig.loci.df)[1]){
+    g <- assign_group(i)
+    group <- append(group,g)
+  }
+  out.df <- cbind(mtxn.sig.loci.df,group)
+  return(out.df)
+}
+
+msig.loci.df <- append_group()
+saveRDS(msig.loci.df,file=rds.dir%&%"msig.loci.df.RDS")
+msig.loci.df <- readRDS(file=rds.dir%&%"msig.loci.df.RDS")
+```
+
+
+Determine genes:model pairs for deeper characterization 
+
+```{r prioritize, echo=FALSE}
+
+make_ensid_ref <- function(){
+  pre1 <- "/Volumes/im-lab/nas40t2/jason/projects/MetaXcan/db_files/gtex/alpha_"
+  pre2 <- "/allResults/ensid_gene_key.txt.gz"
+  f1 <- pre1 %&% 0.5 %&% pre2
+  f2 <- pre1 %&% 1 %&% pre2
+  arg1 <- "cat " %&% f1 %&% " | zmore"
+  arg2 <- "cat " %&% f2 %&% " | zmore"
+  df1 <- fread(arg1); df2 <- fread(arg2)
+  df <- rbind(df1,df2) 
+  df <- df[!duplicated(df), ]
+  saveRDS(df,paste0(rds.dir,"ensid.genename.key.df.RDS"))
+  print("saved RDS file")
+}
+make_ensid_ref()
+ensid.genename.key.df <- readRDS(paste0(rds.dir,"ensid.genename.key.df.RDS"))
+
+gene2ensid <- function(mygene){
+  ensid.genename.key.df <- readRDS(paste0(rds.dir,"ensid.genename.key.df.RDS"))
+  genename <- filter(ensid.genename.key.df,gene==mygene)$ensid
+  return(genename)
+}
+
+prioritize <- function(){
+  df <- filter(msig.loci.df,group=="1")
+  chrom.vec <- c()
+  locus.vec <- c()
+  locstart.vec <- c()
+  locend.vec <- c()
+  gene.vec <- c()
+  mod.vec <- c()
+  for (loc in df$locus){
+    chromo <- filter(df,locus==loc)$chrom
+    lstart <- filter(df,locus==loc)$locus.start
+    lend <- filter(df,locus==loc)$locus.end
+    sig.genes <- strsplit(as.character(filter(df,locus==loc)$mtxn.sig.gw.genes),",")[[1]] 
+    sig.mods <- strsplit(as.character(filter(df,locus==loc)$mtxn.sig.gw.models),",")[[1]] 
+    for (i in 1:length(sig.genes)){
+      g <- sig.genes[i]
+      m <- sig.mods[i]
+      locus.vec <- append(locus.vec,loc)
+      chrom.vec <- append(chrom.vec,chromo)
+      locstart.vec <- append(locstart.vec,lstart)
+      locend.vec <- append(locend.vec, lend)
+      gene.vec <- append(gene.vec,g)
+      mod.vec <- append(mod.vec,m)
+    }
+  }
+  out.df <- as.data.frame(cbind(chrom.vec,locus.vec,
+                                locstart.vec,locend.vec,gene.vec,mod.vec))
+  names(out.df) <- c("chrom","locus","locus.start","locus.end","gene","model")
+  #make_ensid_ref()
+  ensid.genename.key.df <- readRDS(paste0(rds.dir,"ensid.genename.key.df.RDS"))
+  ensid <- c()
+  for (g in out.df$gene){
+    eid <- gene2ensid(g)
+    ensid <- append(ensid,eid)
+  }
+  out.df <- cbind(out.df,ensid)
+  out.df$chrom <- as.integer(as.character(out.df$chrom))
+  out.df$locus <- as.integer(as.character(out.df$locus))
+  out.df$locus.start <- as.integer(as.character(out.df$locus.start))
+  out.df$locus.end <- as.integer(as.character(out.df$locus.end))
+  out.df$gene <- as.character(out.df$gene)
+  out.df$model <- as.character(out.df$model)
+  out.df$ensid <- as.character(out.df$ensid)
+
+  return(out.df)
+}
+
+group1.genemods.df <- prioritize()
+write.table(group1.genemods.df,file="/Volumes/im-lab/nas40t2/jason/projects/MetaXcan/results/predictors/by_locus/group1_genemods.txt",sep="\t",quote = FALSE,row.names=FALSE)
+
+```
+
+All significant results
+
+```{r save_all, echo=FALSE}
+
+completeFun <- function(data, desiredCols) {
+  completeVec <- complete.cases(data[, desiredCols])
+  return(data[completeVec, ])
+}
+
+
+all_genemods <- function(){
+  df <- msig.loci.df
+  chrom.vec <- c()
+  locus.vec <- c()
+  locstart.vec <- c()
+  locend.vec <- c()
+  gene.vec <- c()
+  mod.vec <- c()
+  for (loc in df$locus){
+    chromo <- filter(df,locus==loc)$chrom
+    lstart <- filter(df,locus==loc)$locus.start
+    lend <- filter(df,locus==loc)$locus.end
+    sig.genes <- strsplit(as.character(filter(df,locus==loc)$mtxn.sig.lw.genes),",")[[1]] 
+    sig.mods <- strsplit(as.character(filter(df,locus==loc)$mtxn.sig.lw.models),",")[[1]] 
+    for (i in 1:length(sig.genes)){
+      g <- sig.genes[i]
+      m <- sig.mods[i]
+      locus.vec <- append(locus.vec,loc)
+      chrom.vec <- append(chrom.vec,chromo)
+      locstart.vec <- append(locstart.vec,lstart)
+      locend.vec <- append(locend.vec, lend)
+      gene.vec <- append(gene.vec,g)
+      mod.vec <- append(mod.vec,m)
+    }
+  }
+  out.df <- as.data.frame(cbind(chrom.vec,locus.vec,
+                                locstart.vec,locend.vec,gene.vec,mod.vec))
+  names(out.df) <- c("chrom","locus","locus.start","locus.end","gene","model")
+  make_ensid_ref()
+  ensid.genename.key.df <- readRDS(paste0(rds.dir,"ensid.genename.key.df.RDS"))
+  ensid <- c()
+  for (g in as.character(out.df$gene)){
+    if (is.na(g)){
+      eid <- NA
+    } else{
+      eid <- gene2ensid(g)
+      if (length(eid) ==0){
+        eid <- NA
+      }
+    }
+    ensid <- append(ensid,eid)
+    #print(c(g,eid))
+  }
+  out.df <- cbind(out.df,ensid)
+  out.df$chrom <- as.integer(as.character(out.df$chrom))
+  out.df$locus <- as.integer(as.character(out.df$locus))
+  out.df$locus.start <- as.integer(as.character(out.df$locus.start))
+  out.df$locus.end <- as.integer(as.character(out.df$locus.end))
+  out.df$gene <- as.character(out.df$gene)
+  out.df$model <- as.character(out.df$model)
+  out.df$ensid <- as.character(out.df$ensid)
+  out.df <- out.df[!duplicated(out.df),]
+  #out.df <- na.omit(out.df)
+  out.df <- completeFun(out.df,"gene")
+  return(out.df)
+}
+
+genemods.df <- all_genemods()
+write.table(genemods.df,file="/Volumes/im-lab/nas40t2/jason/projects/MetaXcan/results/predictors/by_locus/genemods.txt",sep="\t",quote = FALSE,row.names=FALSE)
+
+
+
+```
+
+
+```{r tables, echo=FALSE}
+
+mytheme <- gridExtra::ttheme_default(
+  core = list(fg_params=list(cex = 0.7),
+              bg_params=list(fill="ghostwhite",alpha=0.3,col="black")),
+  colhead = list(fg_params=list(cex = 0.9),
+                 bg_params=list(alpha=0.30,col="black")),
+  rowhead = list(fg_params=list(cex = 0))) 
+
+#tabgrob <- tableGrob(plot.df,
+#                      theme=mytheme)
+
+plt1 <- grid.arrange(tableGrob(filter(msig.loci.df,group==1)[,1:5],
+                               theme=mytheme),nrow=1,ncol=1)
+plt2 <- grid.arrange(tableGrob(filter(msig.loci.df,group==2)[,1:5],
+                               theme=mytheme),nrow=1,ncol=1)
+#plt3 <- grid.arrange(tableGrob(filter(msig.loci.df,group==3)[,1:5],
+#                               theme=mytheme),nrow=1,ncol=1)
+plt3 <- grid.arrange(tableGrob(filter(msig.loci.df,group==4)[,1:5],
+                               theme=mytheme),nrow=1,ncol=1)
+
+
+```
+
+
+
+
+
+

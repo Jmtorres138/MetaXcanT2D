@@ -1,0 +1,158 @@
+---
+title: "04.2_Get-MetaXcanSig-Windows.Rmd"
+author: "Jason Torres"
+date: "August 5, 2016"
+output:
+  pdf_document:
+    toc: yes
+  html_document:
+    fig_caption: yes
+    highlight: textmate
+    number_sections: yes
+    theme: journal
+    toc: yes
+---
+
+In this script, I'll determine which non-overlapping windows have MetaXcan-significant associations. First, I'll determine those with genome-wide significant associations (i.e. bonferroni-significant across all tissue models). This will involve using the data frame res.df (processed version of T2Dcore.df). Second, we will need to iteratively determine windows that are locus-wide significant. 
+
+
+```{r setup, echo=FALSE}
+
+library("dplyr")
+
+"%&%" <- function(a,b) paste0(a,b)
+
+root.dir <- "/Users/jtorres/Google Drive/Projects/MetaXcan/MetaXcanT2D/"
+rds.dir <- root.dir %&% "RDS/"
+T2Dcore.df <- readRDS(rds.dir %&% "T2Dcore.df.RDS")
+
+ref.df <- readRDS(rds.dir %&% "non.overlapping.t2dLoci.ref.df.RDS")
+uniq.loci.df <- readRDS(rds.dir %&% "uniq.loci.df.RDS")
+
+```
+
+
+Determine non-overlapping genomic windows with Genome-wide (all tissue models) MetaXcan-significant associations in DIAGRAM (trans-ethnic) 
+
+```{r gw_sig, echo=FALSE}
+
+get_resdf <- function(){
+  out.df <- T2Dcore.df
+  out.df$diag.z.score <- as.numeric(out.df$diag.z.score)  
+  out.df$diag.p.value <- as.numeric(out.df$diag.p.value)  
+  out.df$gera.z.score <- as.numeric(out.df$gera.z.score)  
+  out.df$gera.p.value <- as.numeric(out.df$gera.p.value) 
+  out.df$meta.z.score <- as.numeric(out.df$meta.z.score)
+  out.df$meta.p.value <- as.numeric(out.df$meta.p.value)
+  return(out.df)
+}
+
+res.df <- get_resdf()
+
+append_uni_sig <- function(){
+  mtxn.sig.uni.genes <- c() 
+  mtxn.sig.uni.models <- c() 
+  ref.df$locus.genes <- as.character(ref.df$locus.genes)
+  for (i in 1:dim(ref.df)[1]){
+    gene.vec <- strsplit(ref.df$locus.genes[i],",")[[1]]
+    temp.df <- filter(res.df,diag.bonfer==TRUE,gene %in% gene.vec)
+    if (dim(temp.df)!=0){
+      gstring <- paste(temp.df$gene,collapse=",")
+      mstring <- paste(temp.df$model,collapse=",")
+      mtxn.sig.uni.genes <- append(mtxn.sig.uni.genes,gstring) 
+      mtxn.sig.uni.models <- append(mtxn.sig.uni.models,mstring) 
+    } else{
+      mtxn.sig.uni.genes <- append(mtxn.sig.uni.genes,NA) 
+      mtxn.sig.uni.models <- append(mtxn.sig.uni.models,NA)       
+    }
+  }
+  out.df <- cbind(ref.df, mtxn.sig.uni.genes, mtxn.sig.uni.models)
+  return(out.df)
+}
+
+append_gw_sig <- function(){
+  mtxn.sig.gw.genes <- c() 
+  mtxn.sig.gw.models <- c() 
+  ref.df$locus.genes <- as.character(ref.df$locus.genes)
+  for (i in 1:dim(ref.df)[1]){
+    gene.vec <- strsplit(ref.df$locus.genes[i],",")[[1]]
+    #temp.df <- filter(res.df,diag.bonfer==TRUE,gene %in% gene.vec)
+    temp.df <- filter(res.df,diag.mult.correct==TRUE,gene %in% gene.vec)
+    if (dim(temp.df)!=0){
+      gstring <- paste(temp.df$gene,collapse=",")
+      mstring <- paste(temp.df$model,collapse=",")
+      mtxn.sig.gw.genes <- append(mtxn.sig.gw.genes,gstring) 
+      mtxn.sig.gw.models <- append(mtxn.sig.gw.models,mstring) 
+    } else{
+      mtxn.sig.gw.genes <- append(mtxn.sig.gw.genes,NA) 
+      mtxn.sig.gw.models <- append(mtxn.sig.gw.models,NA)       
+    }
+  }
+  #out.df <- cbind(ref.df, mtxn.sig.gw.genes, mtxn.sig.gw.models)
+  out.df <- cbind(append_uni_sig(), mtxn.sig.gw.genes, mtxn.sig.gw.models)
+  return(out.df)
+}
+
+```
+
+
+Now, will determine the non-overlapping genomic windows with locus-wide MetaXcan associatons. 
+
+```{r lw_sig, echo=FALSE}
+
+load("RDS/diag3/metaXcan.results.Rdata")
+
+append_lw_sig <- function(){
+  ref.gw.df <- append_gw_sig()
+  mtxn.sig.lw.genes <- c() 
+  mtxn.sig.lw.models <- c() 
+  #ref.df$locus.genes <- as.character(ref.gw.df$locus.genes)
+  ref.gw.df$locus.genes <- as.character(ref.gw.df$locus.genes)
+
+  for (i in 1:dim(ref.gw.df)[1]){
+    gene.vec <- strsplit(ref.gw.df$locus.genes[i],",")[[1]]
+    temp.df <- filter(p.L.df,Gene %in% gene.vec)
+    p.thresh <- 0.05 / length(na.omit(as.numeric(as.matrix(temp.df[,2:dim(temp.df)[2]]))))
+    gene.vec <- temp.df$Gene; mod.vec <- names(temp.df)[2:dim(temp.df)[2]]
+    track.genes <- c()
+    track.mods <- c()
+    for (g in gene.vec){
+      for (m in mod.vec){
+        p.val <- as.numeric(filter(temp.df,Gene==g) %>% select(one_of(m)))
+        if (!is.na(p.val) & p.val <= p.thresh){
+          track.genes <- append(track.genes,g)
+          track.mods <- append(track.mods, m)
+        }
+      }
+    }
+    if (length(track.genes)!=0){
+      gstring <- paste(track.genes,collapse=",")
+      mstring <- paste(track.mods,collapse=",")
+      mtxn.sig.lw.genes <- append(mtxn.sig.lw.genes,gstring) 
+      mtxn.sig.lw.models <- append(mtxn.sig.lw.models,mstring) 
+    } else{
+      mtxn.sig.lw.genes <- append(mtxn.sig.lw.genes,NA) 
+      mtxn.sig.lw.models <- append(mtxn.sig.lw.models,NA)       
+    }
+  }
+  out.df <- cbind(ref.gw.df, mtxn.sig.lw.genes, mtxn.sig.lw.models)
+  return(out.df)
+}
+
+
+mtxn.sig.loci.df <- append_lw_sig()
+saveRDS(object=mtxn.sig.loci.df,file=rds.dir%&%"mtxn.sig.loci.df.RDS")
+mtxn.sig.loci.df <- readRDS(file=rds.dir%&%"mtxn.sig.loci.df.RDS")
+
+```
+
+There are `r dim(mtxn.sig.loci.df)[1]` non-overlapping T2D loci, of which:
+
+`r length(na.omit(mtxn.sig.loci.df$mtxn.sig.uni.genes))` have genome-wide significant (across single model) MetaXcan associations 
+
+`r length(na.omit(mtxn.sig.loci.df$mtxn.sig.gw.genes))` have genome-wide significant (across all models) MetaXcan associations 
+
+`r length(na.omit(mtxn.sig.loci.df$mtxn.sig.lw.genes))` have locus-wide significant (across all models) MetaXcan associations 
+
+
+
