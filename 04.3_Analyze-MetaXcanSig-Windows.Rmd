@@ -19,7 +19,7 @@ library("dplyr")
 library("data.table")
 library("gridExtra")
 rds.dir <- "/Users/jtorres/Google Drive/Projects/MetaXcan/MetaXcanT2D/RDS/"
-
+fig.dir <- "/Users/jtorres/Google Drive/Projects/MetaXcan/MetaXcanT2D/figures/"
 "%&%" <- function(a,b) paste0(a,b)
 
 mtxn.sig.loci.df <- readRDS(file=rds.dir%&%"mtxn.sig.loci.df.RDS")
@@ -27,13 +27,13 @@ mtxn.sig.loci.df <- readRDS(file=rds.dir%&%"mtxn.sig.loci.df.RDS")
 ```
 
 
-Note: Although **_CAMK1D_** is not a T2D gene based on annotation from the top 1000 DIAGRAM SNPs, it is listed as a T2D gene on the NHGRI-EBI catalogue, therefore I'll manually update the locus window annotations 
+Note: Although **_CAMK1D_** is not a T2D gene based on annotation from the top 1000 DIAGRAM SNPs, it is listed as a T2D gene on the NHGRI-EBI catalogue, therefore I'll manually update the locus window annotations. Run only once!  
 
 ```{r adjust_CAMK1D, echo=FALSE}
 
-mtxn.sig.loci.df$locus.rep.genes <- gsub("CDC123","CDC123,CAMK1D", mtxn.sig.loci.df$locus.rep.genes)
-saveRDS(mtxn.sig.loci.df,file=rds.dir%&%"mtxn.sig.loci.df.RDS")
-mtxn.sig.loci.df <- readRDS(file=rds.dir%&%"mtxn.sig.loci.df.RDS")
+#mtxn.sig.loci.df$locus.rep.genes <- gsub("CDC123","CDC123,CAMK1D", mtxn.sig.loci.df$locus.rep.genes)
+#saveRDS(mtxn.sig.loci.df,file=rds.dir%&%"mtxn.sig.loci.df.RDS")
+#mtxn.sig.loci.df <- readRDS(file=rds.dir%&%"mtxn.sig.loci.df.RDS")
 
 ```
 
@@ -278,10 +278,68 @@ plt2 <- grid.arrange(tableGrob(filter(msig.loci.df,group==2)[,1:5],
 plt3 <- grid.arrange(tableGrob(filter(msig.loci.df,group==4)[,1:5],
                                theme=mytheme),nrow=1,ncol=1)
 
-
 ```
 
 
+```{r expand_and_save_plots, echo=FALSE}
+
+break_string<- function(mystring){
+  vec <- strsplit(mystring,",")[[1]]
+  count <- 1 
+  outvec <- c()
+  for (e in vec){
+    if (count < 2){
+      count <- count + 1
+      outvec <- append(outvec,e)
+      outvec <- append(outvec,", ")
+    } else{
+      outvec <- append(outvec,e)
+      outvec <- append(outvec,"\n")
+      count=1
+    }
+  }
+  if (outvec[length(outvec)]==", "){
+    outvec <- outvec[1:(length(outvec)-1)]
+  }
+  outstring <- paste(outvec,collapse='')
+  return(outstring)
+}
+
+string_process <- function(string.vec){
+  out.vec <- c()
+  for (i in string.vec){
+    newstring <- break_string(i)
+    out.vec <- append(out.vec,newstring)
+  }
+  return(out.vec)
+}
+
+plot.df <- select(msig.loci.df,one_of("chrom","locus","locus.rep.genes",
+                                      "locus.start","locus.end","mtxn.sig.gw.genes",
+                                      "mtxn.sig.gw.models","mtxn.sig.lw.genes",
+                                      "mtxn.sig.lw.models"))
+plot.df$locus.rep.genes <- as.character(plot.df$locus.rep.genes)
+plot.df$mtxn.sig.gw.genes <- as.character(plot.df$mtxn.sig.gw.genes)
+plot.df$mtxn.sig.gw.models <- as.character(plot.df$mtxn.sig.gw.models)
+plot.df$mtxn.sig.lw.genes <- as.character(plot.df$mtxn.sig.lw.genes)
+plot.df$mtxn.sig.lw.models <- as.character(plot.df$mtxn.sig.lw.models)            
+plot.df$mtxn.sig.lw.models <- as.character(plot.df$mtxn.sig.lw.models)            
+plot.df$mtxn.sig.lw.models <- gsub("TW_","",plot.df$mtxn.sig.lw.models)            
+plot.df$mtxn.sig.lw.models <- gsub("-",".",plot.df$mtxn.sig.lw.models)            
+
+
+plot.df$locus.rep.genes <- string_process(plot.df$locus.rep.genes)
+plot.df$mtxn.sig.gw.genes <- string_process(plot.df$mtxn.sig.gw.genes)
+plot.df$mtxn.sig.gw.models <- string_process(plot.df$mtxn.sig.gw.models)
+plot.df$mtxn.sig.lw.genes <- string_process(plot.df$mtxn.sig.lw.genes)
+plot.df$mtxn.sig.lw.models <- string_process(plot.df$mtxn.sig.lw.models)            
+
+plt1 <- grid.arrange(tableGrob(plot.df,
+                               theme=mytheme),nrow=1,ncol=1)
+
+ggsave(fig.dir%&%"windows.sig.gene.table.pdf",plt1,width=17,height=32)
+                  
+```
 
 
 
