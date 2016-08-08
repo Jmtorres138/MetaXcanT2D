@@ -46,7 +46,7 @@ There are `r dim(df1[is.na(df1$group),])[1]` loci where there are **no significa
 
 ### Signifcant genes and models 
 
-```{r}
+```{r sig_gene, echo=FALSE}
 
 df1.sig <- df1[!is.na(df1$group),]
 gw.genes <- df1.sig$mtxn.sig.gw.genes
