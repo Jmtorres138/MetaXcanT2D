@@ -1,0 +1,56 @@
+---
+title: "Results-Summary.Rmd"
+author: "Jason Torres"
+date: "August 8, 2016"
+output: pdf_document
+---
+
+Here, I summarize key results to discuss in the manuscript: 
+
+# Results at T2D loci 
+
+Referring to the top 1000 SNPs from the DIAGRAM trans-ethnic meta-analysis of GWAS (accessed from AMP-T2D, 2016), considered the set of 89 genes that were annotated to these genes. For each annotated gene (reported T2D gene implicated by proximity to GWAS signal), considered the set of GWAS SNPs annotated to this gene, noted the most distal SNPs on the terminal ends w/ respect to each other. Then expanded the window by 1Mb (i.e. 89 windows). Then delineated non-overlapping windows as the boundaries of the gene loci windows overlapped in several instances. This resulted in 57 unique, non-overlapping windows. We consider all genome-wide and locus-wide (w/ respect to tests performed within the non-overlapping window) gene-level associations. 
+
+```{r t2d_loci, echo=FALSE}
+
+"%&%" <- function(a,b) paste0(a,b)
+library("dplyr")
+
+file.dir <- "/Users/jtorres/Google Drive/Projects/MetaXcan/MetaXcanT2D/"
+rds.dir <- file.dir %&% "RDS/"
+df1 <- readRDS(rds.dir %&% "msig.loci.df.RDS")
+
+
+```
+
+
+### Genome-wide significant vs locus-wide significant 
+
+There are `r dim(df1)[1]` non-overlapping T2D loci, of which:
+
+`r length(na.omit(df1$mtxn.sig.gw.genes))` have genome-wide significant (across all models) MetaXcan associations 
+
+`r length(na.omit(df1$mtxn.sig.lw.genes))` have locus-wide significant (across all models) MetaXcan associations 
+
+### Locus profile 
+
+There are `r dim(filter(df1,group==1))[1]` loci where _at least one_ reported gene yielded a genome-wide signficant association
+
+There are `r dim(filter(df1,group==2))[1]` loci where _at least one_ reported gene yielded a locus-wide **but not genome-wide signficant** association 
+
+There are `r dim(filter(df1,group==3))[1]` loci where an unreported T2D gene yielded a genome-wide association but no reported gene yielded an association an any signifcance level
+
+There are `r dim(filter(df1,group==4))[1]` loci where an unreported T2D gene yielded a locus-wide association but no reported gene yielded an association an any signifcance level
+
+There are `r dim(df1[is.na(df1$group),])[1]` loci where there are **no significant associations** 
+
+### Signifcant genes and models 
+
+```{r}
+
+df1.sig <- df1[!is.na(df1$group),]
+gw.genes <- df1.sig$mtxn.sig.gw.genes
+gw.genes <- na.omit(as.character(gw.genes))
+
+```
+
