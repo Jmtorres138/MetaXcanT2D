@@ -17,6 +17,7 @@ output:
 
 library("dplyr")
 library("data.table")
+library("ggplot2")
 library("gridExtra")
 rds.dir <- "/Users/jtorres/Google Drive/Projects/MetaXcan/MetaXcanT2D/RDS/"
 fig.dir <- "/Users/jtorres/Google Drive/Projects/MetaXcan/MetaXcanT2D/figures/"
@@ -182,7 +183,7 @@ write.table(group1.genemods.df,file="/Volumes/im-lab/nas40t2/jason/projects/Meta
 
 ```
 
-All significant results
+All significant results at T2D loci 
 
 ```{r save_all, echo=FALSE}
 
