@@ -1,0 +1,213 @@
+---
+title: "07.1_GSEA-DIAGRAM.Rmd"
+author: "Jason Torres"
+date: "May 17, 2015"
+output:
+  pdf_document:
+    toc: yes
+  html_document:
+    fig_caption: yes
+    highlight: textmate
+    number_sections: yes
+    theme: journal
+    toc: yes
+---
+
+**Gene Ontology GSEA analysis with goseq (Bioconductor)** 
+
+# Setup 
+
+```{r setup, echo=FALSE}
+library("data.table")
+library("dplyr")
+library("ggplot2")
+library("qvalue")
+"%&%" <- function(a,b) paste0(a,b) 
+rds.dir <- "/Users/jtorres/Google Drive/Projects/MetaXcan/MetaXcanT2D/RDS/" 
+txt.dir <- "/Users/jtorres/Google Drive/Projects/MetaXcan/MetaXcanT2D/txt/diag3/" 
+core.df <- readRDS(paste0(rds.dir,"diag3/core.df.RDS"))
+ggd.ref.df <- readRDS(paste0(rds.dir,"diag3/ggd.ref.df.RDS"))
+```
+
+Genesets 
+
+```{r genesets, echo=FALSE}
+
+geneset.t2d <- readRDS(rds.dir%&%"replicated.p05.t2d.genes")
+geneset.novel <- readRDS(rds.dir%&%"replicated.p05.novel.genes")
+geneset <- c(geneset.t2d,geneset.novel)
+
+get_ensid <- function(genename){
+  ensid <- as.character((filter(ggd.ref.df,symbol==genename) %>% dplyr::select(ensgene))[1,1]) 
+  if (!is.na(ensid) & ensid=="character(0)"){
+    ensid <- NA 
+  }
+  return(ensid) 
+}
+
+make_ensid_vec <- function(genevec){
+  out.vec <- c()
+  for (g in genevec){
+    ensid <- get_ensid(g)
+    out.vec <- append(out.vec,ensid)
+  }
+  return(out.vec)
+}
+
+```
+
+
+
+**Dependencies**
+
+NOTE: The following Code in the "Dependencies" and "Download the Data" section is from Jeff Leek's Statistics of Genome Sciences Coursera course lecuture on GSEA using goseq 
+
+This document depends on the following packages:
+
+```{r load_hidden, echo=FALSE, results="hide", warning=FALSE}
+suppressPackageStartupMessages({
+  library("data.table")
+  library("dplyr")
+  library("ggplot2")
+  library(devtools)
+  library(Biobase)
+  library(goseq)
+  library(DESeq2)
+})
+```
+
+```{r load}
+  library(devtools)
+  library(Biobase)
+  library(goseq)
+  library(DESeq2)
+```
+
+
+To install these packages you can use the code (or if you are compiling the document, remove the `eval=FALSE` from the chunk.)
+
+```{r install_packages, eval=FALSE}
+#install.packages(c("devtools","MatrixEQTL"))
+#source("http://www.bioconductor.org/biocLite.R")
+#biocLite(c("Biobase","goseq","DESeq2"))
+```
+
+Download the data
+
+Here we are going to follow along with the tutorial on [goseq](http://www.bioconductor.org/packages/release/bioc/vignettes/goseq/inst/doc/goseq.pdf). You can see what genomes are supported by this package
+
+```{r}
+#head(supportedGenomes())
+#head(supportedGeneIDs())
+```
+
+# Make input files for GSEA analyses   
+
+Note: the vector files that will be created here will be further modifed in the next section within the GSEA functions 
+
+First, need to create the input named vector, the vector will be integer indicating if a gene is in a significant gene set  
+
+```{r gsea_inputs, echo=FALSE}
+
+make_gsea_inputs <- function(geneset,prefix){
+  analysis.genes <- unique(core.df$gene)
+  ens.df <- filter(ggd.ref.df,symbol %in% analysis.genes,biotype=="protein_coding") %>% dplyr::select(symbol,ensgene)
+  ens.vec <- c()
+  for (g in analysis.genes){
+    ens <- as.character(filter(ens.df,symbol==g)[1,2])
+    ens.vec <- append(ens.vec,ens)
+  }
+  ens.vec <- unique(ens.vec)
+  sig.ens.vec  <- na.omit(make_ensid_vec(geneset))
+  int.vec <- c()
+  for (e in ens.vec){
+    if (e %in% sig.ens.vec){
+      i <- 1
+    } else{
+      i <- 0 
+    }
+    int.vec <- append(int.vec,i)
+  }
+  sig.int.vec <- int.vec
+  names(sig.int.vec) <- ens.vec
+  sig.int.vec <- sig.int.vec[!duplicated(names(sig.int.vec))]
+  saveRDS(sig.int.vec,paste0(rds.dir,prefix%&%".int.vec.RDS"))
+  print("Saved RDS file")
+}
+```
+
+# Gene set enrichment analyses (GSEA) Functions
+
+Next, we will run a parametric GSEA analysis with go_seq  
+We need to set up a weighting function for all the genes in that genome
+
+Here we use a parametric test to look for differences in enrichment with respect to different categories. This is the 2 x 2 table approach. You can also use random sampling to define the null distribution by setting the parameters `method="Sampling"` and `repcnt=1000` for the number of null repititions. 
+
+```{r gsea, echo=FALSE}
+
+gsea <- function(named.int.vec,savename){
+  analysis.genes <- unique(core.df$gene)
+  ggd.sub.df <- ggd.ref.df; ggd.sub.df$chr <- as.numeric(ggd.sub.df$chr)
+  total.genes <- filter(ggd.sub.df,biotype=="protein_coding",is.na(chr)==FALSE,symbol %in% analysis.genes) %>% dplyr::select(ensgene)
+  total.genes <- unique(as.data.frame(total.genes,stringsAsFactors=FALSE)[,1])
+  sig <- as.integer(total.genes %in% names(named.int.vec[named.int.vec == 1]))
+  names(sig) <- total.genes
+  pwf=nullp(sig,"hg19","ensGene")
+  GO.wall=goseq(pwf,"hg19","ensGene")
+  saveRDS(GO.wall,paste0(rds.dir,savename))
+  print("Saved RDS file") 
+}
+```
+
+You can also use random sampling to define the null distribution by setting the parameters `method="Sampling"` and `repcnt=1000` for the number of null repititions. (Jeff Leek) 
+
+```{r gsea_nonparam, echo=FALSE}
+gsea_nonparam <- function(named.int.vec,savename){
+  analysis.genes <- unique(core.df$gene)
+  ggd.sub.df <- ggd.ref.df; ggd.sub.df$chr <- as.numeric(ggd.sub.df$chr)
+  total.genes <- filter(ggd.sub.df,biotype=="protein_coding",is.na(chr)==FALSE,symbol %in% analysis.genes) %>% dplyr::select(ensgene)
+  total.genes <- unique(as.data.frame(total.genes,stringsAsFactors=FALSE)[,1])
+  sig <- as.integer(total.genes %in% names(named.int.vec[named.int.vec == 1]))
+  names(sig) <- total.genes
+  pwf=nullp(sig,"hg19","ensGene")
+  GO.Samp=goseq(pwf,"hg19","ensGene",method="Sampling",repcnt=10000) #100000
+  saveRDS(GO.Samp,paste0(rds.dir,savename))
+  print("Saved RDS file") 
+}
+```
+
+
+```{r run_analyses, echo=FALSE}
+
+make_gsea_inputs(geneset,"p05")
+int.vec <- readRDS(rds.dir%&%"p05.int.vec.RDS")
+gsea_nonparam(int.vec,"gsea.p05.df")
+gsea.df <- readRDS(rds.dir%&%"gsea.p05.df")
+
+make_gsea_inputs(geneset.t2d,"p05.t2d")
+int.vec <- readRDS(rds.dir%&%"p05.t2d.int.vec.RDS")
+gsea_nonparam(int.vec,"gsea.p05.t2d.df")
+gsea.t2d.df <- readRDS(rds.dir%&%"gsea.p05.t2d.df")
+
+make_gsea_inputs(geneset.novel,"p05.novel")
+int.vec <- readRDS(rds.dir%&%"p05.novel.int.vec.RDS")
+gsea_nonparam(int.vec,"gsea.p05.novel.df")
+gsea.novel.df <- readRDS(rds.dir%&%"gsea.p05.novel.df")
+
+append_qvals <- function(df){
+  df <- filter(df,ontology=="BP")
+  num <- dim(df)[1]
+  bonf <- 0.05/num
+  p.vec <- df$over_represented_pvalue
+  qval <- qvalue(p.vec)$qvalues
+  bonfer <- p.vec <= bonf
+  out.df <- cbind(df,qval,bonfer)
+  return(out.df)
+}
+
+test <- append_qvals(gsea.df)
+```
+
+
+
+
