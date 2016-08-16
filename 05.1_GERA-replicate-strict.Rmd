@@ -323,7 +323,7 @@ make_gera_lw_rep_df <- function(){
 
 
 rep.df <- make_gera_lw_rep_df()
-saveRDS(rep.df,file=rds.dir%&%"lw.rep.df")
+saveRDS(rep.df,file=rds.dir%&%"lw.rep.df.RDS")
 
 
 sum(na.omit(rep.df$lw.rep))
