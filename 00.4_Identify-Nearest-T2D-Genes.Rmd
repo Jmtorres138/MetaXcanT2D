@@ -1,0 +1,202 @@
+---
+title: "identify-nearest-t2D-genes.Rmd"
+author: "Jason Torres"
+date: "August 18, 2016"
+output:
+  html_document:
+    toc: yes
+  pdf_document:
+    fig_caption: yes
+    highlight: espresso
+    number_sections: yes
+    toc: yes
+---
+This script will read in reference file (Gencode v19 gene annotations) and **DIAGRAM** trans-ethnic meta-analysis of GWAS file (build 37).
+The protocol:  
+
+* Identify bonferonni-signficant SNPs 
+* Use Gencode v19 file to determine the nearest gene for each SNP 
+
+
+```{r setup, echo=FALSE}
+
+"%&%" <- function(a,b) paste0(a,b)
+
+library("dplyr")
+library("data.table")
+
+txt.dir <- "/Users/jtorres/Google Drive/Projects/MetaXcan/MetaXcanT2D/txt/"
+rds.dir <- "/Users/jtorres/Google Drive/Projects/MetaXcan/MetaXcanT2D/RDS/"
+server.dir <- "/Volumes/im-lab/nas40t2/jason/projects/ReferenceData/"
+
+gencode.path <- server.dir %&% "UCSC/GENCODE.Genes.V19.Basic.annotated.txt.gz"
+
+diag37.path  <- server.dir %&% "diagramT2D/build37/diagram.mega-meta.build37.txt.gz"
+
+```
+
+
+```{r eval_diag37, echo=FALSE}
+
+diag37.df <- fread("cat " %&% diag37.path %&% " | zmore")
+# Bonferonni-threshold 
+bonfer <- 0.05 / dim(diag37.df)[1]
+diag37.bonfer.df <- filter(diag37.df,P<=bonfer)
+# 10^(-6) threshodl 
+diag37.10min6.df <- filter(diag37.df,P<=(10^(-6)))
+
+write.table(diag37.bonfer.df$SNP,file=txt.dir%&%"diag37.bonfer-snps.txt",
+            quote=FALSE,sep="\t",row.names=FALSE,
+            col.names=FALSE)
+write.table(diag37.10min6.df$SNP,file=txt.dir%&% "diag37.10min6-snps.txt",
+            quote=FALSE,sep="\t",row.names=FALSE,
+            col.names=FALSE)
+
+```
+
+Steve Turner Reference 
+
+```{r ggd, echo=FALSE}
+
+make_ggd_ref <- function(){
+  print("Gene Annotatino Table from Steve Turner")
+  print("Getting Genetics Done")
+  #http://www.gettinggeneticsdone.com/2015/11/annotables-convert-gene-ids.html
+  library("devtools")
+  #devtools::install_github("stephenturner/annotables")
+  library(annotables)
+  df <- grch37
+  saveRDS(df,paste0(rds.dir,"ggd.ref.df.RDS"))
+}
+make_ggd_ref()
+ggd.ref.df <- readRDS(paste0(rds.dir,"ggd.ref.df.RDS"))
+
+```
+
+
+# Gencode Analysis 
+
+```{r process_gencode, echo=FALSE}
+
+process_gencode <- function(){
+  gencode.df <- fread("cat  " %&% gencode.path %&% " | zmore")
+  gencode.df <- filter(gencode.df,hg19.wgEncodeGencodeAttrsV19.geneType=="protein_coding")
+  names(gencode.df) <- c("name","chrom","strand","txStart","txEnd","name2",
+                         "geneID","geneName","geneType","transcriptType")
+  gencode.df <- filter(gencode.df,transcriptType=="protein_coding")
+  gencode.df$chrom <- gsub("chr","",gencode.df$chrom)
+  gencode.df <- filter(gencode.df,!grepl("[_]",gencode.df$chrom))
+  gencode.df <- filter(gencode.df,!grepl("[X]",gencode.df$chrom)) 
+  gencode.df <- filter(gencode.df,!grepl("[Y]",gencode.df$chrom)) 
+  gencode.df <- filter(gencode.df,!grepl("[M]",gencode.df$chrom)) 
+  gencode.df$chrom <- as.numeric(gencode.df$chrom)
+  return(gencode.df)
+}
+
+gencode.df <- process_gencode()
+
+```
+
+
+Determine nearest genes (Gencode v19; **protein_coding**) for significant SNP sets 
+
+
+```{r main, echo=FALSE}
+
+find_nearest_gene <- function(rsid){
+  chromo <- filter(diag37.df,SNP==rsid)$CHR
+  pos <- filter(diag37.df,SNP==rsid)$POS
+  temp.df <- filter(gencode.df,chrom==chromo)
+  min.dist <- c()
+  for (i in 1:dim(temp.df)[1]){
+    tx.start <- temp.df$txStart[i]
+    tx.end <- temp.df$txEnd[i]
+    val <- min(abs(pos-tx.start),abs(pos-tx.end),
+               abs(tx.start-pos),abs(tx.end-pos))
+    min.dist <- append(min.dist,val)
+  }
+  temp.df <- cbind(temp.df,min.dist)
+  temp.df <- arrange(temp.df,min.dist)
+  gene <- temp.df[1,]$geneName
+  ensid <- temp.df[1,]$geneID
+  return(list(c(gene,ensid)))
+}
+
+find_for_all_snps <- function(df){
+  #df is either diag37.10min6.df or diag37.bonfer.df
+  count = 0 
+  rsid.vec <- c()
+  chromo.vec <- c() 
+  pos.vec <- c()
+  gene.vec <- c()
+  ensid.vec <- c() 
+  start.vec <- c()
+  end.vec <- c()
+  ensgene.vec <- c() 
+  for (i in 1:dim(df)[1]){
+    count = count+1
+    print(count)
+    rsid <- df$SNP[i]
+    pos <- df$POS[i]
+    chromo <- df$CHR[i]
+    l = find_nearest_gene(rsid)
+    gene <- l[[1]][1]
+    ensid <- l[[1]][2]
+    rsid.vec <- append(rsid.vec,rsid)
+    chromo.vec <- append(chromo.vec,chromo)
+    pos.vec <- append(pos.vec,pos)
+    gene.vec <- append(gene.vec,gene)
+    ensid.vec <- append(ensid.vec,ensid)
+    temp.df <- filter(ggd.ref.df,symbol==gene)[1,]
+    start <- temp.df$start
+    end <- temp.df$end
+    ensgene <- temp.df$ensgene
+    start.vec <- append(start.vec,start)
+    end.vec <- append(end.vec,end)
+    ensgene.vec <- append(ensgene.vec,ensgene)
+  }
+  out.df <- as.data.frame(cbind(chromo.vec,rsid.vec,
+                                pos.vec,gene.vec,ensid.vec,
+                                start.vec,end.vec,ensgene.vec),stringsAsFactors=FALSE)
+  names(out.df) <- c("chrom","rsid","pos","gene","ensid",
+                     "tx.start","tx.end","ensgene")
+  out.df$chrom <- as.integer(out.df$chrom)
+  out.df$pos <- as.integer(out.df$pos)
+  out.df <- out.df[!duplicated(out.df),]
+  
+  return(out.df)
+}
+
+## Save Bonfer results 
+neargene.bonfer.df <- find_for_all_snps(diag37.bonfer.df)
+saveRDS(neargene.bonfer.df,rds.dir%&%"neargene.bonfer.df.RDS")
+nearest.gene.bonfer.df <- dplyr::select(neargene.bonfer.df,one_of("chrom","gene","ensgene","ensid",
+                                                           "tx.start","tx.end"))
+nearest.gene.bonfer.df <- nearest.gene.bonfer.df[!duplicated(nearest.gene.bonfer.df),]
+saveRDS(nearest.gene.bonfer.df,rds.dir%&%"nearest.gene.bonfer.df.RDS")
+write.table(nearest.gene.bonfer.df,file=txt.dir%&%"nearest.gene.bonfer.txt",
+            quote=FALSE,sep="\t",row.names=FALSE)
+# Save 10^(-6) results 
+neargene.10min6.df <- find_for_all_snps(diag37.10min6.df)
+saveRDS(neargene.10min6.df,rds.dir%&%"neargene.10min6.df.RDS")
+nearest.gene.10min6.df <- dplyr::select(neargene.10min6.df,one_of("chrom","gene","ensgene","ensid",
+                                                           "tx.start","tx.end"))
+nearest.gene.10min6.df <- nearest.gene.10min6.df[!duplicated(nearest.gene.10min6.df),]
+saveRDS(nearest.gene.10min6.df,rds.dir%&%"nearest.gene.10min6.df.RDS")
+write.table(nearest.gene.10min6.df,file=txt.dir%&%"nearest.gene.10min6.txt",
+            quote=FALSE,sep="\t",row.names=FALSE)
+```
+
+
+If necessary: 
+
+Save file of SNPs to manually insert in online LD tool _SNPclip_ in \textbf{LDLink} 
+
+Manually prune the signficant T2D SNPs (save above) in LDLink tool SNPclip 
+
+1000 Genomes Phase3, dbSNP 142 
+
+* r2 Threshold = 0.1 (default)
+* MAF Threshold = 0.01 (default) 
+* Populations = AMR, EAS, EUR, SAS; NOTE: African Ancestry not represented in DIAGRAM study 
+
