@@ -3,12 +3,12 @@ title: "identify-nearest-t2D-genes.Rmd"
 author: "Jason Torres"
 date: "August 18, 2016"
 output:
-  html_document:
-    toc: yes
   pdf_document:
     fig_caption: yes
     highlight: espresso
     number_sections: yes
+    toc: yes
+  html_document:
     toc: yes
 ---
 This script will read in reference file (Gencode v19 gene annotations) and **DIAGRAM** trans-ethnic meta-analysis of GWAS file (build 37).
@@ -25,8 +25,10 @@ The protocol:
 library("dplyr")
 library("data.table")
 
-txt.dir <- "/Users/jtorres/Google Drive/Projects/MetaXcan/MetaXcanT2D/txt/"
-rds.dir <- "/Users/jtorres/Google Drive/Projects/MetaXcan/MetaXcanT2D/RDS/"
+txt.dir <- "/Users/jtorres/Google Drive/Projects/MetaXcan/MetaXcanT2D/txt.gtexV6p/"
+rds.dir <- "/Users/jtorres/Google Drive/Projects/MetaXcan/MetaXcanT2D/RDS.gtexV6p/"
+dir.create(txt.dir)
+dir.create(rds.dir)
 server.dir <- "/Volumes/im-lab/nas40t2/jason/projects/ReferenceData/"
 
 gencode.path <- server.dir %&% "UCSC/GENCODE.Genes.V19.Basic.annotated.txt.gz"

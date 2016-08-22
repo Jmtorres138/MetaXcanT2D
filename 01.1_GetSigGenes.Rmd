@@ -23,7 +23,8 @@ library("ggplot2")
 #biocLite("qvalue")
 library("qvalue")
 "%&%" <- function(a,b) paste0(a,b) 
-root.dir <- "/Volumes/im-lab/nas40t2/jason/projects/MetaXcan/results/"
+server.dir <- "/Volumes/im-lab/nas40t2/jason/projects/MetaXcan/results/"
+rds.dir <- "/Users/jtorres/Google Drive/Projects/MetaXcan/MetaXcanT2D/RDS.gtexV6p/"
 ```
 
 # Functions for Getting Bonferroni and FDR 5%-significant Gene Sets 
@@ -49,8 +50,8 @@ get.fdr.genes <- function(file.vec){
   top.vec <- c() 
   for (file in file.vec){
     result.file <- res.dir %&% file
-    result.df <- fread(result.file)
-    df <- na.omit(result.df) 
+    df <- fread(result.file)
+    #df <- na.omit(result.df) 
     qval <- qvalue(df$pvalue)$qvalues 
     df <- cbind(df,qval)
     fdr <- 0.05
@@ -64,7 +65,7 @@ get.fdr.genes <- function(file.vec){
 # Partitioning Top Gene Sets 
 
 ```{r top_gene_partitioning, echo=FALSE,fig.height=8,fig.weight=2}
-t2d.loci.df <- fread("/Volumes/im-lab/nas40t2/jason/projects/MetaXcan/results/t2d-gene-info.txt")
+t2d.loci.df <- readRDS(rds.dir%&%"t2d.loci.df.RDS")
 
 t2d.loci.genes <- unique(t2d.loci.df$nearby.gene)
 reported.genes <- unique(t2d.loci.df$reported.gene) 
@@ -129,19 +130,19 @@ make.partition.plot <- function(alpha){
 # DIAGRAM3 Analyses 
 
 ```{r diag3, echo=FALSE}
-rds.root.dir <- "/Users/jtorres/Google Drive/Projects/MetaXcan/MetaXcanT2D/RDS/"
+rds.root.dir <- "/Users/jtorres/Google Drive/Projects/MetaXcan/MetaXcanT2D/RDS.gtexV6p/"
 dir.create(rds.root.dir)
 
 rds.dir <- rds.root.dir %&% "diag3/"
 dir.create(rds.dir)
 
 
-res.dir <- root.dir %&% "DIAGRAM3_ImpG_0.80/alpha_1_predictFDR0.05/"
+res.dir <- server.dir %&% "DIAGRAM_ImpG_0.8_gtexV6p/alpha_0.5/"
 file.vec <- list.files(res.dir,pattern="TW")
-file.vec <- append(file.vec,list.files(res.dir,pattern="CrossTissue"))
+#file.vec <- append(file.vec,list.files(res.dir,pattern="CrossTissue"))
 bonfer.genes <- unique(get.bonfer.genes(file.vec))
 fdr.genes <- unique(get.fdr.genes(file.vec))
-make.partition.plot(1)
+make.partition.plot(0.5)
 ```
 
 # GERA Analyses 
@@ -151,10 +152,10 @@ make.partition.plot(1)
 rds.dir <- rds.root.dir %&% "gera/"
 dir.create(rds.dir)
 
-res.dir <- root.dir %&% "GERA-T2D_ImpG_0.80/alpha_1_predictFDR0.05/"
+res.dir <- server.dir %&% "GERA_ImpG_0.8_gtexV6p/alpha_0.5/"
 file.vec <- list.files(res.dir,pattern="TW")
 file.vec <- append(file.vec,list.files(res.dir,pattern="CrossTissue"))
 bonfer.genes <- unique(get.bonfer.genes(file.vec))
 fdr.genes <- unique(get.fdr.genes(file.vec))
-make.partition.plot(1)
+make.partition.plot(0.5)
 ```
