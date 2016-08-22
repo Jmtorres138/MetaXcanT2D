@@ -5,3 +5,70 @@ date: "August 22, 2016"
 output: pdf_document
 ---
 
+Compare genes represented by GTEx **V6m** Lasso (alpha=1) models against GTEx **V6p** (alpha=0.5) models in Tissue-wide Skeletal Muscle 
+
+# Setup 
+
+```{r setup}
+"%&%" <- function(a,b) paste0(a,b)
+
+library("data.table")
+library("dplyr")
+library("qvalue")
+
+v6m.dir <- "/Volumes/im-lab/nas40t2/jason/projects/MetaXcan/db_files/gtex/alpha_1/allResults"
+v6m.path <- file.path(v6m.dir,"TW_Muscle-Skeletal.allResults.txt.gz")
+
+v6p.dir <- "/Volumes/im-lab/nas40t2/scott/complete_dbs/GTEx_v6p/allResults"
+v6p.path <- file.path(v6p.dir,"Muscle_Skeletal.allResults.txt")
+
+v6m.df <- fread("cat " %&% v6m.path %&% " | zmore")
+v6p.df <- fread(v6p.path)
+
+```
+
+
+# Comparison 
+
+```{r compare}
+
+dim(v6m.df)
+dim(v6p.df)
+
+qval <- qvalue(v6m.df$pval)$qvalues
+v6m.df <- cbind(v6m.df,qval)
+
+qval <- qvalue(v6p.df$pval)$qvalues
+v6p.df <- cbind(v6p.df,qval)
+
+dim(filter(v6m.df,qval<=0.05))
+dim(filter(v6p.df,qval<=0.05))
+
+```
+
+# SOX4 Comparison 
+
+```{r sox4}
+
+df1 <- filter(v6m.df,genename=="SOX4")
+df2 <- filter(v6p.df,genename=="SOX4")
+
+```
+
+# Compare with GTEx V6m, elastic.net (alpha=0.5)
+
+```{r elasticV6m}
+
+v6m.en.dir <- "/Volumes/im-lab/nas40t2/jason/projects/MetaXcan/db_files/gtex/alpha_0.5/allResults"
+v6m.en.path <- file.path(v6m.en.dir,"TW_Muscle-Skeletal.allResults.txt.gz")
+v6m.en.df <- fread("cat " %&% v6m.en.path %&% " | zmore")
+
+qval <- qvalue(v6m.en.df$pval)$qvalues
+v6m.en.df <- cbind(v6m.en.df,qval)
+
+df1 <- filter(v6m.df,genename=="SOX4")
+df1en <- filter(v6m.en.df,genename=="SOX4")
+
+
+```
+
