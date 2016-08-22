@@ -154,7 +154,7 @@ dir.create(rds.dir)
 
 res.dir <- server.dir %&% "GERA_ImpG_0.8_gtexV6p/alpha_0.5/"
 file.vec <- list.files(res.dir,pattern="TW")
-file.vec <- append(file.vec,list.files(res.dir,pattern="CrossTissue"))
+#file.vec <- append(file.vec,list.files(res.dir,pattern="CrossTissue"))
 bonfer.genes <- unique(get.bonfer.genes(file.vec))
 fdr.genes <- unique(get.fdr.genes(file.vec))
 make.partition.plot(0.5)

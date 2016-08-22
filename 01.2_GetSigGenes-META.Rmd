@@ -23,8 +23,9 @@ library("ggplot2")
 #biocLite("qvalue")
 library("qvalue")
 "%&%" <- function(a,b) paste0(a,b) 
-root.dir <- "/Volumes/im-lab/nas40t2/jason/projects/MetaXcan/results/meta-analyses/"
-diag.dir <- "/Volumes/im-lab/nas40t2/jason/projects/MetaXcan/results/DIAGRAM3_ImpG_0.80/"
+server.dir <- "/Volumes/im-lab/nas40t2/jason/projects/MetaXcan/results/"
+root.dir <- server.dir %&% "meta-analyses/"
+diag.dir <- server.dir %&% "DIAGRAM_ImpG_0.8_gtexV6p/"
 
 ```
 
@@ -150,9 +151,9 @@ make.partition.plot <- function(alpha){
   if (alpha==1){
     saveRDS(df1,paste0(rds.dir,"lasso_Bonferonni.RDS"))
     saveRDS(df2,paste0(rds.dir,"lasso_FDR05.RDS"))
- # } else if (alpha==0.5){
-  #  saveRDS(df1,paste0(rds.dir,"elasticNet_Bonferonni.RDS"))
-  #  saveRDS(df2,paste0(rds.dir,"elasticNet_FDR05.RDS"))    
+  } else if (alpha==0.5){
+    saveRDS(df1,paste0(rds.dir,"elasticNet_Bonferonni.RDS"))
+    saveRDS(df2,paste0(rds.dir,"elasticNet_FDR05.RDS"))    
   } else {
     print("Alpha can only be 1")
   }
@@ -174,10 +175,10 @@ make.partition.plot <- function(alpha){
 rds.dir <- "/Users/jtorres/Google Drive/Projects/MetaXcan/MetaXcanT2D/RDS/diag_gera_meta-analysis/"
 dir.create(rds.dir)
 
-res.dir <- root.dir %&% "DIAGRAM-GERA_ImpG_0.80/alpha_1_predictFDR0.05/"
+res.dir <- root.dir %&% "DIAGRAM-GERA_ImpG_0.80_gtexV6p/output/alpha_0.5/"
 file.vec <- list.files(res.dir,pattern="TW")
-file.vec <- append(file.vec,list.files(res.dir,pattern="CrossTissue"))
-bonfer.genes <- unique(get.bonfer.genes(file.vec,"1_predictFDR0.05"))
-fdr.genes <- unique(get.fdr.genes(file.vec,"1_predictFDR0.05"))
+#file.vec <- append(file.vec,list.files(res.dir,pattern="CrossTissue"))
+bonfer.genes <- unique(get.bonfer.genes(file.vec,"0.5"))
+fdr.genes <- unique(get.fdr.genes(file.vec,"0.5"))
 make.partition.plot(1)
 ```
