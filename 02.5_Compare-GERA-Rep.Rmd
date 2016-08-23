@@ -26,11 +26,11 @@ library("ggplot2")
 library("stargazer")
 library("ggrepel")
 "%&%" <- function(a,b) paste0(a,b) 
-rds.dir <- "/Users/jtorres/Google Drive/Projects/MetaXcan/MetaXcanT2D/RDS/" 
-txt.dir <- "/Users/jtorres/Google Drive/Projects/MetaXcan/MetaXcanT2D/txt/"
+rds.dir <- "/Users/jtorres/Google Drive/Projects/MetaXcan/MetaXcanT2D/RDS.gtexV6p/" 
+txt.dir <- "/Users/jtorres/Google Drive/Projects/MetaXcan/MetaXcanT2D/txt.gtexV6p/"
 dir.create(txt.dir)
-tab.dir <- "/Users/jtorres/Google Drive/Projects/MetaXcan/MetaXcanT2D/tables/"
-fig.dir <- "/Users/jtorres/Google Drive/Projects/MetaXcan/MetaXcanT2D/figures/"
+tab.dir <- "/Users/jtorres/Google Drive/Projects/MetaXcan/MetaXcanT2D/tables.gtexV6p/"
+fig.dir <- "/Users/jtorres/Google Drive/Projects/MetaXcan/MetaXcanT2D/figures.gtexV6p/"
 rep.df <- readRDS(rds.dir %&% "diag3/sig.genes.gera-rep.df.RDS")
 ```
 
@@ -85,7 +85,7 @@ Directional comparison of Z-scores, restricted to predicted r2 >= 0.01 (1%)
 
 
 ```{r zplot_1, echo=FALSE, fig.height=6,fig.width=9}
-zscore_plot(1)
+zscore_plot(0.5)
 ```
 
 # SNP Number Plots 
@@ -153,7 +153,7 @@ write_table <- function(alpha){
   return(sub.df)
 }
 
-tab.df <- write_table(1)
+tab.df <- write_table(0.5)
 
 ```
 

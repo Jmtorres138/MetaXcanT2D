@@ -1,5 +1,5 @@
 ---
-title: "01.3_GetSigGenes-GERA-Rep.Rmd"
+title: "02.4_GetSigGenes-GERA-Rep.Rmd"
 author: "Jason Torres"
 date: "August 4, 2016"
 output:
@@ -24,7 +24,7 @@ library("ggplot2")
 library("qvalue")
 "%&%" <- function(a,b) paste0(a,b) 
 #root.dir <- "/Volumes/im-lab/nas40t2/jason/projects/MetaXcan/results/"
-rds.dir <- "/Users/jtorres/Google Drive/Projects/MetaXcan/MetaXcanT2D/RDS/" 
+rds.dir <- "/Users/jtorres/Google Drive/Projects/MetaXcan/MetaXcanT2D/RDS.gtexV6p/" 
 ```
 
 # Functions for Getting significant Gene Set 
@@ -35,13 +35,13 @@ make_rep_df <- function(){
   g.vec <- c(); mod.vec <- c(); diagp.vec <- c(); gerap.vec <- c()
   eval.vec <- c(); type.vec <- c(); chrom.vec <- c(); diagz.vec <- c()
   geraz.vec <- c(); diagn.vec <- c(); geran.vec <- c()
-  diag.df <- readRDS(rds.dir %&% "diag3/sig.gene.Tw.Ct.a1.df.RDS")
+  diag.df <- readRDS(rds.dir %&% "diag3/sig.gene.TW.a05.df.RDS")
   diag.df <- diag.df[!duplicated(diag.df), ]
   load(rds.dir %&% "gera/metaXcan.results.Rdata")
-  p.df <- cbind(select(p.L.df,one_of("Gene","CrossTissue")),select(p.L.df,contains("TW_")))
-  z.df <- cbind(select(z.L.df,one_of("Gene","CrossTissue")),select(z.L.df,contains("TW_")))
-  n.L.df <- readRDS(rds.dir %&% "gera/n.L.df.RDS")
-  n.df <- cbind(select(n.L.df,one_of("Gene","CrossTissue")),select(n.L.df,contains("TW_")))
+  p.df <- cbind(select(p.EN.df,one_of("Gene","CrossTissue")),select(p.EN.df,contains("TW_")))
+  z.df <- cbind(select(z.EN.df,one_of("Gene","CrossTissue")),select(z.EN.df,contains("TW_")))
+  n.EN.df <- readRDS(rds.dir %&% "gera/n.EN.df.RDS")
+  n.df <- cbind(select(n.EN.df,one_of("Gene","CrossTissue")),select(n.EN.df,contains("TW_")))
   # Iterate through rows (i.e. gene-tissue associations) 
   for (r in 1:dim(diag.df)[1]){ 
     gene <- diag.df[r,3]; model <- diag.df[r,9]; diagp <- diag.df[r,12]
@@ -100,7 +100,8 @@ make_rep_df <- function(){
 # Partitioning Top Gene Sets 
 
 ```{r top_gene_partitioning, echo=FALSE,fig.height=8,fig.weight=2}
-t2d.loci.df <- fread("/Volumes/im-lab/nas40t2/jason/projects/MetaXcan/results/t2d-gene-info.txt")
+#t2d.loci.df <- fread("/Volumes/im-lab/nas40t2/jason/projects/MetaXcan/results/t2d-gene-info.txt")
+t2d.loci.df <- readRDS(rds.dir%&%"t2d.loci.df.RDS")
 t2d.loci.genes <- unique(t2d.loci.df$nearby.gene)
 reported.genes <- unique(t2d.loci.df$reported.gene) 
 t2d.loci.genes.unknown <- setdiff(t2d.loci.genes,reported.genes)
@@ -156,5 +157,5 @@ make.partition.plot <- function(alpha){
 
 ```{r gera, echo=FALSE}
 rep.genes <- unique(filter(make_rep_df(),replicated==TRUE)$gene)
-make.partition.plot(1)
+make.partition.plot(0.5)
 ```
