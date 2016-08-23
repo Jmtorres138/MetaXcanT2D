@@ -108,7 +108,9 @@ get.fdr.genes <- function(file.vec,myalpha){
 # Partitioning Top Gene Sets 
 
 ```{r top_gene_partitioning, echo=FALSE,fig.height=8,fig.weight=2}
-t2d.loci.df <- fread("/Volumes/im-lab/nas40t2/jason/projects/MetaXcan/results/t2d-gene-info.txt")
+#t2d.loci.df <- fread("/Volumes/im-lab/nas40t2/jason/projects/MetaXcan/results/t2d-gene-info.txt"
+rds.dir <- "/Users/jtorres/Google Drive/Projects/MetaXcan/MetaXcanT2D/RDS.gtexV6p/"
+t2d.loci.df <- readRDS(rds.dir%&%"t2d.loci.df.RDS")
 t2d.loci.genes <- unique(t2d.loci.df$nearby.gene)
 reported.genes <- unique(t2d.loci.df$reported.gene)
 t2d.loci.genes.unknown <- setdiff(t2d.loci.genes,reported.genes)
@@ -172,7 +174,7 @@ make.partition.plot <- function(alpha){
 # DIAGRAM-GERA Meta-Analyses 
 
 ```{r diag3, echo=FALSE}
-rds.dir <- "/Users/jtorres/Google Drive/Projects/MetaXcan/MetaXcanT2D/RDS/diag_gera_meta-analysis/"
+rds.dir <- "/Users/jtorres/Google Drive/Projects/MetaXcan/MetaXcanT2D/RDS.gtexV6p/diag_gera_meta-analysis/"
 dir.create(rds.dir)
 
 res.dir <- root.dir %&% "DIAGRAM-GERA_ImpG_0.80_gtexV6p/output/alpha_0.5/"
@@ -180,5 +182,5 @@ file.vec <- list.files(res.dir,pattern="TW")
 #file.vec <- append(file.vec,list.files(res.dir,pattern="CrossTissue"))
 bonfer.genes <- unique(get.bonfer.genes(file.vec,"0.5"))
 fdr.genes <- unique(get.fdr.genes(file.vec,"0.5"))
-make.partition.plot(1)
+make.partition.plot(0.5)
 ```
