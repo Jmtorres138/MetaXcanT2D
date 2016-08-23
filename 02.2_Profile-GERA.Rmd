@@ -13,14 +13,10 @@ output:
     toc: yes
 ---
 
-In order to run this script, you must first run the 01.0_GetSigGenes.Rmd script to identify and classify Bonferroni and FDR 5%-significant genes. Moreover, you need to create a summary table files of all MetaXcan association results.  
-Prerequisites: 
-* Run 01.1_GetSigGenes.Rmd 
-* Run JTbuild.t2d-loci-tables.extended.predFDR05.ImpG.py 
 
 # Assemble result and reference data frames
 
-Create reference data frames of signficant MetaXcan genes from DIAGRAM3 analysis 
+Create reference data frames of signficant MetaXcan genes from GERA analysis 
 
 ```{r setup, echo=FALSE}
 library("data.table")
@@ -28,23 +24,22 @@ library("dplyr")
 library("ggplot2")
 library("stargazer")
 "%&%" <- function(a,b) paste0(a,b) 
-fig.dir <- "/Users/jtorres/Google Drive/Projects/MetaXcan/MetaXcanT2D/figures/"
+
+fig.dir <- "/Users/jtorres/Google Drive/Projects/MetaXcan/MetaXcanT2D/figures.gtexV6p/"
 dir.create(fig.dir,showWarnings=FALSE)
-rds.dir <- "/Users/jtorres/Google Drive/Projects/MetaXcan/MetaXcanT2D/RDS/gera/" 
+rds.dir <- "/Users/jtorres/Google Drive/Projects/MetaXcan/MetaXcanT2D/RDS.gtexV6p/gera/" 
 dir.create(rds.dir,showWarnings=FALSE)
-pdf.dir <- "/Users/jtorres/Google Drive/Projects/MetaXcan/MetaXcanT2D/pdf/gera/" 
+pdf.dir <- "/Users/jtorres/Google Drive/Projects/MetaXcan/MetaXcanT2D/pdf.gtexV6p/gera/" 
 dir.create(pdf.dir,showWarnings=FALSE)
-tab.dir <- "/Users/jtorres/Google Drive/Projects/MetaXcan/MetaXcanT2D/tables/"
+tab.dir <- "/Users/jtorres/Google Drive/Projects/MetaXcan/MetaXcanT2D/tables.gtexV6p/"
 dir.create(tab.dir,showWarnings=FALSE)
-table.dir<-"/Volumes/im-lab/nas40t2/jason/projects/MetaXcan/results/tables/predict_FDR0.05_ImpG/"
+table.dir<-"/Volumes/im-lab/nas40t2/jason/projects/MetaXcan/results/tables/GTExV6p/"
 
-#/group/im-lab/nas40t2/jason/projects/MetaXcan/results/tables/predict_FDR0.05_ImpG/DIAGRAM3_ImpG_0.80.1.zscore.table.csv.gz
-meta.name <- "GERA-T2D_ImpG_0.80" 
-
-df1 <- readRDS(rds.dir %&% "lasso_Bonferonni.RDS")
-Alpha <- rep(1,dim(df1)[1]); df1 <- cbind(df1,Alpha)
-df2 <- readRDS(rds.dir %&% "lasso_FDR05.RDS")
-Alpha <- rep(1,dim(df2)[1]); df2 <- cbind(df2,Alpha)
+meta.name <- "GERA_ImpG_0.8_gtexV6p" 
+df1 <- readRDS(rds.dir %&% "elasticNet_Bonferonni.RDS")
+Alpha <- rep(0.5,dim(df1)[1]); df1 <- cbind(df1,Alpha)
+df2 <- readRDS(rds.dir %&% "elasticNet_FDR05.RDS")
+Alpha <- rep(0.5,dim(df2)[1]); df2 <- cbind(df2,Alpha)
 bonfer.df <- df1
 fdr05.df <- df2 
 remove(df1,df2)
@@ -68,7 +63,7 @@ make.latex.table <- function(df,tabname,fname){
 }
 ```
 
-Read in MetaXcan all z-scores for DIAGRAM3 analysis - use table file 
+Read in MetaXcan all z-scores for GERA3 analysis - use table file 
 Create z-score df and pval df for each alpha 
 
 ```{r z_pval_dfs, echo=FALSE}
@@ -88,7 +83,7 @@ makePdf <- function(alpha){
   return(df)
 }
 
-z.L.df <- makeZdf(1); p.L.df <- makePdf(1)
+z.EN.df <- makeZdf(0.5); p.EN.df <- makePdf(0.5)
 ```
 
 Create q-value dfs 
@@ -109,7 +104,7 @@ makeQdf <- function(p.df){
   q.df$Gene <- as.character(q.df$Gene)
   return(q.df)
 }
-q.L.df <- makeQdf(p.L.df)
+q.EN.df <- makeQdf(p.EN.df)
 ```
 
 Chekpoint 1: Here I save the dataframes as RDS files. I will then comment out the commands 
@@ -117,7 +112,7 @@ that generate the dfs and will instead load the RDS files in futures runs of thi
 Importantly, this will save time when rendering pdfs since the dfs are truly generated only once 
 
 ```{r checkpoint1,echo=FALSE}
-save(z.L.df,p.L.df,q.L.df,file=paste0(rds.dir,"metaXcan.results.Rdata"))
+save(z.EN.df,p.EN.df,q.EN.df,file=paste0(rds.dir,"metaXcan.results.Rdata"))
 load(paste0(rds.dir,"metaXcan.results.Rdata"))
 ```
 
@@ -132,9 +127,9 @@ makeNSNPSMODdf <- function(alpha){
   df <- as.data.frame(fread(arg))
   return(df)
 }
-s.L.df <- makeNSNPSMODdf(1)
-saveRDS(s.L.df,paste0(rds.dir,"s.L.df.RDS"))
-s.L.df <- readRDS(paste0(rds.dir,"s.L.df.RDS"))
+s.EN.df <- makeNSNPSMODdf(0.5)
+saveRDS(s.EN.df,paste0(rds.dir,"s.EN.df.RDS"))
+s.EN.df <- readRDS(paste0(rds.dir,"s.EN.df.RDS"))
 
 makeNSNPSdf <- function(alpha){
   dir <- table.dir %&% meta.name %&% "."
@@ -143,32 +138,38 @@ makeNSNPSdf <- function(alpha){
   df <- as.data.frame(fread(arg))
   return(df)
 }
-n.L.df <- makeNSNPSdf(1)
-saveRDS(n.L.df,paste0(rds.dir,"n.L.df.RDS"))
-n.L.df <- readRDS(paste0(rds.dir,"n.L.df.RDS"))
+n.EN.df <- makeNSNPSdf(0.5)
+saveRDS(n.EN.df,paste0(rds.dir,"n.EN.df.RDS"))
+n.EN.df <- readRDS(paste0(rds.dir,"n.EN.df.RDS"))
 ```
 
 Create Reference with ENSEMBLE Ids 
 
 ```{r ensid_ref, echo=FALSE}
-make_ensid_ref <- function(){
-  pre1 <- "/Volumes/im-lab/nas40t2/jason/projects/MetaXcan/db_files/gtex/alpha_"
-  pre2 <- "/allResults/ensid_gene_key.txt.gz"
-  f1 <- pre1 %&% 0.5 %&% pre2
-  f2 <- pre1 %&% 1 %&% pre2
-  arg1 <- "cat " %&% f1 %&% " | zmore"
-  arg2 <- "cat " %&% f2 %&% " | zmore"
-  df1 <- fread(arg1); df2 <- fread(arg2)
-  df <- rbind(df1,df2) 
-  df <- df[!duplicated(df), ]
-  saveRDS(df,paste0(rds.dir,"ensid.genename.key.df.RDS"))
-  print("saved RDS file")
-}
-make_ensid_ref()
-ensid.genename.key.df <- readRDS(paste0(rds.dir,"ensid.genename.key.df.RDS"))
+
+server.dir <- "/Volumes/im-lab/nas40t2/jason/projects/ReferenceData/UCSC/"
+gencode.path <- server.dir %&%  "GENCODE.Genes.V19.Basic.annotated.txt.gz"
+gencode.ref.df <- fread("cat " %&% gencode.path %&% " | zmore")
+
+#make_ensid_ref <- function(){
+#  pre1 <- "/Volumes/im-lab/nas40t2/jason/projects/MetaXcan/db_files/gtex/alpha_"
+#  pre2 <- "/allResults/ensid_gene_key.txt.gz"
+#  f1 <- pre1 %&% 0.5 %&% pre2
+#  f2 <- pre1 %&% 1 %&% pre2
+#  arg1 <- "cat " %&% f1 %&% " | zmore"
+#  arg2 <- "cat " %&% f2 %&% " | zmore"
+#  df1 <- fread(arg1); df2 <- fread(arg2)
+#  df <- rbind(df1,df2) 
+#  df <- df[!duplicated(df), ]
+#  saveRDS(df,paste0(rds.dir,"ensid.genename.key.df.RDS"))
+#  print("saved RDS file")
+#}
+#make_ensid_ref()
+#ensid.genename.key.df <- readRDS(paste0(rds.dir,"ensid.genename.key.df.RDS"))
 
 gene2ensid <- function(mygene){
-  genename <- filter(ensid.genename.key.df,gene==mygene)$ensid
+  #genename <- filter(ensid.genename.key.df,gene==mygene)$ensid
+  genename <- filter(gencode.ref.df,hg19.wgEncodeGencodeAttrsV19.geneName==mygene)$hg19.wgEncodeGencodeAttrsV19.geneId[1]
   return(genename)
 }
 ```
@@ -176,18 +177,18 @@ gene2ensid <- function(mygene){
 Create Gene Annotation reference Build37 Genecode V18
 
 ```{r build37_ref, echo=FALSE}
-make_gene_ref <- function(){
-  dir <- "/Volumes/im-lab/nas40t2/hwheeler/cross-tissue/gtex-annot/"
-  fname <- "gencode.v18.genes.patched_contigs.summary.protein"
-  arg <- "cat " %&% dir %&% fname %&% " | zmore"
-  df <- fread(arg)
-  names(df) <- c("chrom","strand","txStart","txEnd","ensid","gene","type","status")
-  df$chrom <- as.numeric(gsub("chr","",df$chrom))
-  saveRDS(df,paste0(rds.dir,"gene.ref.df.RDS"))
-  print("saved RDS file")
-}
-make_gene_ref()
-gene.ref.df <- readRDS(paste0(rds.dir,"gene.ref.df.RDS"))
+#make_gene_ref <- function(){
+#  dir <- "/Volumes/im-lab/nas40t2/hwheeler/cross-tissue/gtex-annot/"
+#  fname <- "gencode.v18.genes.patched_contigs.summary.protein"
+#  arg <- "cat " %&% dir %&% fname %&% " | zmore"
+#  df <- fread(arg)
+#  names(df) <- c("chrom","strand","txStart","txEnd","ensid","gene","type","status")
+#  df$chrom <- as.numeric(gsub("chr","",df$chrom))
+#  saveRDS(df,paste0(rds.dir,"gene.ref.df.RDS"))
+#  print("saved RDS file")
+#}
+#make_gene_ref()
+#gene.ref.df <- readRDS(paste0(rds.dir,"gene.ref.df.RDS"))
 
 
 make_ggd_ref <- function(){
@@ -215,9 +216,9 @@ makeR2df <- function(alpha){
   return(df)
 }
 
-r.L.df <- makeR2df(1)
-saveRDS(r.L.df,paste0(rds.dir,"r.L.df.RDS"))
-r.L.df <- readRDS(paste0(rds.dir,"r.L.df.RDS"))
+r.EN.df <- makeR2df(0.5)
+saveRDS(r.EN.df,paste0(rds.dir,"r.EN.df.RDS"))
+r.EN.df <- readRDS(paste0(rds.dir,"r.EN.df.RDS"))
 ```
 
 # Build MetaXcan data frame for all genes 
@@ -228,14 +229,14 @@ Building core of Gene, Model (i.e. Tissue), and Alpha
 
 ```{r build_core, echo=FALSE}
 
-build_core <- function(){
-  gvec.lasso <- z.L.df$Gene
-  tvec.lasso <- names(z.L.df)[2:dim(z.L.df)[2]]
+build_core <- function(alpha){
+  gvec.mod <- z.EN.df$Gene
+  tvec.mod <- names(z.EN.df)[2:dim(z.EN.df)[2]]
   core.df <- c()
-  for (t in tvec.lasso){
-    tvec <- rep(t,length(gvec.lasso))
-    avec <- rep(1,length(gvec.lasso))
-    stack <- cbind(gvec.lasso,tvec,avec)
+  for (t in tvec.mod){
+    tvec <- rep(t,length(gvec.mod))
+    avec <- rep(alpha,length(gvec.mod))
+    stack <- cbind(gvec.mod,tvec,avec)
     core.df <- rbind(core.df,stack)
   }
   core.df <- as.data.frame(core.df)
@@ -246,7 +247,7 @@ build_core <- function(){
   saveRDS(core.df,paste0(rds.dir,"core.df.RDS"))
   print("Saving RDS file")
 }
-build_core()
+build_core(0.5)
 core.df <- readRDS(paste0(rds.dir,"core.df.RDS"))
 ```
 
@@ -259,23 +260,30 @@ Will use 2.7e-06 for Bonferroni-cutoff.
 
 ```{r significant_genes, echo=FALSE}
 
-make_sig_gene.df <- function(){
+# Note KLHDC5 is an outdated name for KLHL42
+# (http://www.genecards.org/cgi-bin/carddisp.pl?gene=KLHL42)
+
+make_sig_gene.df <- function(myalpha){
   sig.gene.df <- c()
-  d1 <- readRDS(paste0(rds.dir,"lasso_FDR05.RDS")) %>% select(Gene,Type)
+  d1 <- readRDS(paste0(rds.dir,"elasticNet_FDR05.RDS")) %>% select(Gene,Type)
   d1$Gene <- as.character(d1$Gene); d1$Type <- as.character(d1$Type)
-  Alpha <- rep(1,dim(d1)[1])
+  Alpha <- rep(myalpha,dim(d1)[1])
   d1 <- cbind(d1,Alpha)
   df <- d1
   # Iterate over significant genes associations 
   for (i in 1:dim(df)[1]){
     gene <- df[i,1]; type <- df[i,2]; alpha <- df[i,3]
-    if (alpha==1) {
-      z.df <- filter(z.L.df,Gene==gene)
-      p.df <- filter(p.L.df,Gene==gene)
-      q.df <- filter(q.L.df,Gene==gene)
-      s.df <- filter(s.L.df,Gene==gene)
-      r.df <- filter(r.L.df,Gene==gene)
-      n.df <- filter(n.L.df,Gene==gene)
+    print(c(gene,i))
+    if (gene == "KLHDC5"){
+      gene = "KLHL42"
+    }
+    if (alpha==0.5) {
+      z.df <- filter(z.EN.df,Gene==gene)
+      p.df <- filter(p.EN.df,Gene==gene)
+      q.df <- filter(q.EN.df,Gene==gene)
+      s.df <- filter(s.EN.df,Gene==gene)
+      r.df <- filter(r.EN.df,Gene==gene)
+      n.df <- filter(n.EN.df,Gene==gene)
     } 
       gene.df <- rbind(z.df,p.df,q.df,s.df,n.df,r.df)
       gene.df <- gene.df[ , colSums(is.na(gene.df)) == 0]
@@ -361,7 +369,7 @@ make_sig_gene.df <- function(){
   saveRDS(sig.gene.df,paste0(rds.dir,"sig.gene.df.RDS"))
   print("Saved RDS file")
 }
-make_sig_gene.df()
+make_sig_gene.df(0.5)
 sig.gene.df <- readRDS(paste0(rds.dir,"sig.gene.df.RDS"))
 ```
 
@@ -381,16 +389,16 @@ sub_sig <- function(alphalimit=NULL,TwCtOnly=FALSE,bonfer=FALSE){
   if (is.null(alphalimit)==FALSE) df <- filter(df,alpha==alphalimit)
   if (bonfer==TRUE){
     if (is.null(alphalimit)==TRUE){
-      temp2.df <- readRDS(rds.dir %&% "lasso_Bonferonni.RDS")
+      temp2.df <- readRDS(rds.dir %&% "elasticNet_Bonferonni.RDS")
       keepgenes2 <- unique(as.character(temp2.df$Gene))
       keepgenes <- append(keepgenes2)
       df <- filter(df, gene %in% keepgenes)
-    } else if (alphalimit==1){
-      temp.df <- readRDS(rds.dir %&% "lasso_Bonferonni.RDS")
+    } else if (alphalimit==0.5){
+      temp.df <- readRDS(rds.dir %&% "elasticNet_Bonferonni.RDS")
       keepgenes <- unique(as.character(temp.df$Gene))
       df <- filter(df, gene %in% keepgenes)
-    } else if (alphalimit==0.5){
-      print("Option for alpha == 0.5 is not available")
+    } else if (alphalimit==1){
+      print("Option for alpha == 1 is not available")
     } else {
       print("Please enter a valid Alpha for Bonferonni option")
     }
@@ -415,8 +423,8 @@ reformat_sub_sig <- function(df,designame){
   return(df)
 }
 
-prof <- function(){
-  df <- reformat_sub_sig(sub_sig(TwCtOnly=TRUE,alphalimit=1),"TW.CT.a1")
+prof <- function(myalpha){
+  df <- reformat_sub_sig(sub_sig(TwCtOnly=TRUE,alphalimit=NULL),"TW.a"%&%myalpha)
   df$Type <- factor(df$Type,levels=c("T2D.Gene","Known.Region","Unknown"))
   plt <- ggplot(data=df,aes(x=Criteria)) +
     geom_bar(aes(fill=Type),color="black") +
@@ -432,15 +440,15 @@ prof <- function(){
   ggsave(paste0(pdf.dir,"ProfiledSignificantGeneSets.pdf"))
   return(plt)
 }
-prof()
+prof(0.5)
 ```
 
 
 After analyzing the plot created in the previous chunk of code, I will save dataframes for the TW.CT.a1  to carry foward for Gene Set Enrichment Analyses 
 
 ```{r save_dfs, echo=FALSE}
-sig.gene.TW.CT.a1.df <- sub_sig(TwCtOnly=TRUE,alphalimit=1) 
-saveRDS(sig.gene.TW.CT.a1.df,paste0(rds.dir,"sig.gene.TW.CT.a1.df.RDS"))
+sig.gene.TW.a05.df <- sub_sig(TwCtOnly=TRUE,alphalimit=0.5) 
+saveRDS(sig.gene.TW.a05.df,paste0(rds.dir,"sig.gene.TW.a05.df.RDS"))
 ```
 
 
@@ -449,8 +457,8 @@ Limit to only **Bonferroni-significant** results
 
 ```{r profileBonferOnly, echo=FALSE,fig.height=8,fig.width=6}
 
-prof_bonfer_only <- function(){
-  df <- reformat_sub_sig(sub_sig(TwCtOnly=TRUE,bonfer=TRUE,alphalimit=1),"TW.CT.a1.bonfer")
+prof_bonfer_only <- function(myalpha){
+  df <- reformat_sub_sig(sub_sig(TwCtOnly=TRUE,bonfer=TRUE,alphalimit=0.5),"TW.CT.a"%&% myalpha%&%".bonfer")
   df$Type <- factor(df$Type,levels=c("T2D.Gene","Known.Region","Unknown"))
   plt <- ggplot(data=df,aes(x=Criteria)) +
     geom_bar(aes(fill=Type),color="black") +
@@ -467,22 +475,22 @@ prof_bonfer_only <- function(){
   return(plt)
 }
 
-prof_bonfer_only()
+prof_bonfer_only(0.5)
 ```
 
-After analyzing the plot created in the previous chunk of code, I will save dataframes for the TW.CT.a1 and t2d.TW.CT.a1 subsets to carry foward for Gene Set Enrichment Analyses 
+After analyzing the plot created in the previous chunk of code, I will save dataframes for the TW.CT.a1 and t2d.TW.a1 subsets to carry foward for Gene Set Enrichment Analyses 
 
 ```{r save_dfs_bonfer, echo=FALSE}
-sig.gene.TW.CT.a1.bonfer.df <- sub_sig(TwCtOnly=TRUE,bonfer=TRUE,alphalimit=1) 
-saveRDS(sig.gene.TW.CT.a1.bonfer.df,paste0(rds.dir,"sig.gene.TW.CT.a1.bonfer.df.RDS"))
+sig.gene.TW.a05.bonfer.df <- sub_sig(TwCtOnly=TRUE,bonfer=TRUE,alphalimit=0.5) 
+saveRDS(sig.gene.TW.a05.bonfer.df,paste0(rds.dir,"sig.gene.TW.a05.bonfer.df.RDS"))
 ```
 
 # Write results table
 
-```{r lasso_table,echo=FALSE}
+```{r elasticNet_table,echo=FALSE}
 
 make.profile.table <- function(){
-  rds.vec <- c("sig.gene.TW.CT.a1.df.RDS","sig.gene.TW.CT.a1.bonfer.df.RDS")
+  rds.vec <- c("sig.gene.TW.a05.df.RDS","sig.gene.TW.a05.bonfer.df.RDS")
   Alpha <- c("1","1")
   Threshold <- c("FDR 5%","Bonferroni")
   T2D.Genes <- c()
@@ -500,7 +508,7 @@ make.profile.table <- function(){
     Known.Loci <- append(Known.Loci,kg)
     Unknown.Loci <- append(Unknown.Loci,ug)
   }
-  meta.name <- gsub("DIAGRAM3","DIAGRAM",meta.name) # technical correction for just DIAGRAM
+  #meta.name <- gsub("DIAGRAM","DIAGRAM",meta.name) # technical correction for just DIAGRAM
   # Will be ignored for GERA 
   out.df <- data.frame(Alpha,Threshold,Total,T2D.Genes,Known.Loci,Unknown.Loci)
   tname <- "Summary of MetaXcan results from " %&% meta.name %&% " study"
