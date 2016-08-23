@@ -17,14 +17,6 @@ output:
 
 **Load libraries, assign paths, and read data**
 
-Prerequisite: 
-
-* Run JTbuild.t2d-loci-tables.extended.predFDR05.ImpG.py
-* Run 03.0_FillMissingT2DlociGenes.Rmd
-
-This generates an annotation file of all genes within 1Mb of the top 89 T2D genes implicated by the top 1000 SNPs from DIAGRAM (AMP-T2D)
-
-
 
 ```{r setup, echo=FALSE}
 
@@ -32,14 +24,12 @@ library("dplyr")
 library("data.table")
 "%&%" <- function(a,b) paste0(a,b) 
 
-load("/Users/jtorres/Google Drive/Projects/MetaXcan/MetaXcanT2D/RDS/diag3/metaXcan.results.Rdata")
-z.df <- cbind(select(z.L.df,one_of("Gene","CrossTissue")),
-                select(z.L.df,contains("TW_")))
+rds.dir <- "/Users/jtorres/Google Drive/Projects/MetaXcan/MetaXcanT2D/RDS.gtexV6p/"
 
-result.dir <- "/Volumes/im-lab/nas40t2/jason/projects/MetaXcan/results/"
-#table.file <- result.dir %&% #"loci-tables/DIAGRAM-t2d-loci.table.extended.alpha1.predFDR05.txt.gz"
-table.file <- result.dir %&% "loci-tables/DIAGRAM-t2d-loci.table.extended.alpha1.predFDR05.ImpG.APPENDED.txt.gz"
-file.arg <- "cat " %&% table.file %&% " | zmore"
+load(rds.dir %&% "diag3/metaXcan.results.Rdata")
+
+z.df <- cbind(select(z.EN.df,one_of("Gene","CrossTissue")),
+                select(z.EN.df,contains("TW_")))
 
 is.empty <- function(x) {
     return(length(x)==0)
@@ -50,34 +40,37 @@ is.empty <- function(x) {
 
 
 Modify and save loci.df 
-**Need to harmonize loci.df with data in p.L.df. Importantly, values corresponding to genes with cross-validation r2 < 1% in a given tissu model had values set to NA. Need to esure that data in loci.df is consistent.** 
+**Need to harmonize loci.df with data in p.EN.df. Importantly, values corresponding to genes with cross-validation r2 < 1% in a given tissu model had values set to NA. Need to esure that data in loci.df is consistent.** 
 
 ```{r loci_df,  echo=FALSE}
 
-subdf <- function(df,meta.name,type="TW") { 
-  df <- tbl_df(df) %>% select(chrom:nearby.txend,contains(meta.name))
-  tw.df <- df %>% select(chrom:nearby.txend,contains("TW_"),contains("DGN"),contains("CrossTissue"))
-  org.df <- df %>% select(chrom:nearby.txend,contains("Organ_"),contains("CrossTissue"))
-  ts.df <- df %>% select(chrom:nearby.txend,contains("TS_"),contains("CrossTissue"))
-  names(tw.df) <- gsub(meta.name %&% "_","",names(tw.df))
-  names(org.df) <- gsub(meta.name %&% "_","",names(org.df))
-  names(ts.df) <- gsub(meta.name %&% "_","",names(ts.df))
-  if (type=="TW"){
-    return(tw.df)
-  } else if (type=="Organ"){
-    return(org.df)
-  } else if (type=="TS"){
-    return(ts.df)
-  } else{
-    stop("Need a valid type: TW, Organ, or TS")
-  }
-}
+#subdf <- function(df,meta.name,type="TW") { 
+#  df <- tbl_df(df) %>% select(chrom:nearby.txend,contains(meta.name))
+#  tw.df <- df %>% select(chrom:nearby.txend,contains("TW_"),contains("DGN"),contains("CrossTissue"))
+#  org.df <- df %>% select(chrom:nearby.txend,contains("Organ_"),contains("CrossTissue"))
+#  ts.df <- df %>% select(chrom:nearby.txend,contains("TS_"),contains("CrossTissue"))
+#  names(tw.df) <- gsub(meta.name %&% "_","",names(tw.df))
+#  names(org.df) <- gsub(meta.name %&% "_","",names(org.df))
+#  names(ts.df) <- gsub(meta.name %&% "_","",names(ts.df))
+#  if (type=="TW"){
+#    return(tw.df)
+#  } else if (type=="Organ"){
+#    return(org.df)
+#  } else if (type=="TS"){
+#    return(ts.df)
+#  } else{
+#    stop("Need a valid type: TW, Organ, or TS")
+#  }
+#}
 
 
 harmonize_loci_df <- function(){
-  loci.df <- fread(file.arg)
-  loci.df <- subdf(loci.df,"DIAGRAM3","TW")
-  names(z.df) <- gsub("-",".",names(z.df))
+  loci.df <- readRDS(rds.dir%&%"diag3/t2d.loci.z.df.RDS")
+  #loci.df <- subdf(loci.df,"DIAGRAM3","TW")
+  names(z.df) <- gsub("TW_","",names(z.df))
+  names(z.df) <- gsub("_",".",names(z.df))
+  names(loci.df) <- gsub("TW_","",names(loci.df))
+  names(loci.df) <- gsub("_",".",names(loci.df))  
   loci.mod.vec <- names(loci.df)[14:length(names(loci.df))]
   # Iterate over rows in loci.df
   for (i in 1:dim(loci.df)[1]){
@@ -100,7 +93,7 @@ harmonize_loci_df <- function(){
     }
   }
   savename <- "/Users/jtorres/Google Drive/Projects/MetaXcan/" %&% 
-                "MetaXcanT2D/RDS/loci.df.RDS"
+                "MetaXcanT2D/RDS.gtexV6p/loci.df.RDS"
   print("Saving RDS file")
   saveRDS(loci.df,file=savename)
   return(loci.df)
@@ -109,7 +102,7 @@ harmonize_loci_df <- function(){
 harmonize_loci_df()
 
 loci.df <- readRDS("/Users/jtorres/Google Drive/Projects/MetaXcan/" %&% 
-                "MetaXcanT2D/RDS/loci.df.RDS")
+                "MetaXcanT2D/RDS.gtexV6p/loci.df.RDS")
 
 ```
 
@@ -123,16 +116,16 @@ Build bonferonni reference data frame
 
 build_bonfer_df <- function(analysis.name){
   if (analysis.name=="DIAGRAM"){
-    load("RDS/diag3/metaXcan.results.Rdata")
+    load("RDS.gtexV6p/diag3/metaXcan.results.Rdata")
   } else if (analysis.name=="GERA-T2D"){
-    load("RDS/gera/metaXcan.results.Rdata")
+    load("RDS.gtexV6p/gera/metaXcan.results.Rdata")
   } else if (analysis.name=="Meta-analysis"){
-    load("RDS/diag_gera_meta-analysis/metaXcan.results.Rdata")
+    load("RDS.gtexV6p/diag_gera_meta-analysis/metaXcan.results.Rdata")
   } else{
     stop("Enter valid analysis name: DIAGRAM, GERA-T2D, Meta-analysis")
   } 
-  p.df <- cbind(select(p.L.df,one_of("CrossTissue")),
-                select(p.L.df,contains("TW_"))) 
+  p.df <- cbind(select(p.EN.df,one_of("CrossTissue")),
+                select(p.EN.df,contains("TW_"))) 
   Model <- names(p.df)
   Bonfer.Correct <- c()
   count.vec <- c()
@@ -148,6 +141,9 @@ build_bonfer_df <- function(analysis.name){
   Bonfer.Correct <- append(Bonfer.Correct,bonfer.mult)
   df <- as.data.frame(cbind(Model,Bonfer.Correct),stringsAsFactors=FALSE)
   df$Bonfer.Correct <- as.numeric(df$Bonfer.Correct)
+  df$Model <- gsub("TW_","",df$Model)
+  df$Model <- gsub("_",".",df$Model)
+  df$Model <- gsub("-",".",df$Model)
   return(df)
 }
 
@@ -164,8 +160,9 @@ locus.subset <- function(genename){
     filter(reported.gene==genename) %>%   select(-contains("length"),
                                                  -contains("tx"),-starts_with("win"))
   chrom <- df$chrom[1]; snp <- df$most.sig.snp[1]; repgene <- df$reported.gene[1]
-  df <- select(df,nearby.gene:CrossTissue); names(df) <- gsub("TW_","",names(df))
+  df <- select(df,nearby.gene:Whole.Blood.DGN); names(df) <- gsub("TW_","",names(df))
   names(df) <- gsub("TS_","",names(df)); names(df) <- gsub("Organ_","",names(df))
+  names(df) <- gsub("_",".",names(df)); names(df) <- gsub("-",".",names(df))
   return(df)
 }
 
@@ -235,19 +232,28 @@ analyze_locus_v2 <- function(genename){
   Model.Wide.Significant <- c() 
   Locus.Significant <- c() 
   for (g in gvec){
-    for (m in mvec[1:42]){ # NOTE: mvec[43] is "MultipleCorrection" and not valid here 
+    #print(g)
+    for (m in mvec[1:45]){ 
+      #print(m)# NOTE: mvec[46] is "MultipleCorrection" and not valid here 
       mthresh <- filter(bonfer.df,Model==m)[1,2]
       m <- gsub("TW_","",m); m <- sub("-",".",m)
-      m <- sub("-",".",m)
-      g.z <- as.numeric(as.matrix(filter(l.df,nearby.gene==g) %>% select(contains(m))))
+      m <- sub("_",".",m)
+      if (m == "Whole.Blood"){
+        g.z <- as.numeric(as.matrix(filter(l.df,nearby.gene==g) %>% select(one_of(m))))  
+      } else{
+        g.z <- as.numeric(as.matrix(filter(l.df,nearby.gene==g) %>% select(contains(m))))
+      }
       pval <- calc_p(g.z)
 #      if (!is.na(pval) & pval <= mthresh){
+      #print(c(!is.na(pval) & pval <= bonfer.mult.locus))
+      #print(c(g,m))
       if (!is.na(pval) & pval <= bonfer.mult.locus){
         Locus <- append(Locus,genename)
         Nearby.Gene <- append(Nearby.Gene,g)
         Zscore <- append(Zscore,g.z)
         PValue <- append(PValue,pval)
         MODEL <- append(MODEL,m)
+        #print(MODEL)
         Model.Wide.Significant <- append(Model.Wide.Significant,(pval <= bonfer.mult))
         Genome.Wide.Significant <- append(Genome.Wide.Significant,(pval <= mthresh))
         Locus.Significant <- append(Locus.Significant,(pval <= bonfer.mult.locus))
@@ -290,9 +296,9 @@ build_sig_locidf <- function(genevector){
 
 loci.sig.df <- build_sig_locidf(gene.vec)
 saveRDS(loci.sig.df,"/Users/jtorres/Google Drive/Projects/MetaXcan/" %&% 
-                "MetaXcanT2D/RDS/loci.sig.df.RDS")
+                "MetaXcanT2D/RDS.gtexV6p/loci.sig.df.RDS")
 loci.sig.df <- readRDS("/Users/jtorres/Google Drive/Projects/MetaXcan/" %&% 
-                "MetaXcanT2D/RDS/loci.sig.df.RDS")
+                "MetaXcanT2D/RDS.gtexV6p/loci.sig.df.RDS")
 
 ```
 
@@ -397,7 +403,7 @@ print_report_nomultsig <- function(){
                       rep.gene.not.sig.only.vec,rep.gene.not.sig.not.only.vec)
   print("Saving list as RDS")
   saveRDS(save.list,"/Users/jtorres/Google Drive/Projects/MetaXcan/" %&% 
-                "MetaXcanT2D/RDS/loci.profile.list.RDS")
+                "MetaXcanT2D/RDS.gtexV6p/loci.profile.list.RDS")
 }
 
 print_report_multsig <- function(){
@@ -427,9 +433,8 @@ print_report_multsig <- function(){
                       rep.gene.not.sig.only.vec,rep.gene.not.sig.not.only.vec)
   print("Saving list as RDS")
   saveRDS(save.list,"/Users/jtorres/Google Drive/Projects/MetaXcan/" %&% 
-                "MetaXcanT2D/RDS/loci.profile.multcorrect.list.RDS")
+                "MetaXcanT2D/RDS.gtexV6p/loci.profile.multcorrect.list.RDS")
 }
-
 
 print_report_loci <- function(){
   result.sig.df <- profile_v2(sigthresh="locus")
@@ -458,7 +463,7 @@ print_report_loci <- function(){
                       rep.gene.not.sig.only.vec,rep.gene.not.sig.not.only.vec)
   print("Saving list as RDS")
   saveRDS(save.list,"/Users/jtorres/Google Drive/Projects/MetaXcan/" %&% 
-                "MetaXcanT2D/RDS/loci.profile.multcorrectLoci.list.RDS")
+                "MetaXcanT2D/RDS.gtexV6p/loci.profile.multcorrectLoci.list.RDS")
 }
 
 print_report_nomultsig()
