@@ -24,12 +24,12 @@ library("cowplot")
 "%&%" <- function(a,b) paste0(a,b)
 
 root.dir <- "/Users/jtorres/Google Drive/Projects/MetaXcan/MetaXcanT2D/" 
-rds.dir <- root.dir %&% "RDS/"
+rds.dir <- root.dir %&% "RDS.gtexV6p/"
 pdf.dir <- "/Users/jtorres/Google Drive/Projects/MetaXcan/" %&% 
-  "MetaXcanT2D/figures/locusPlots/"
+  "MetaXcanT2D/figures.gtexV6p/locusPlots/"
 dir.create(pdf.dir)
 loci.df <- readRDS("/Users/jtorres/Google Drive/Projects/MetaXcan/" %&% 
-                "MetaXcanT2D/RDS/loci.df.RDS")
+                "MetaXcanT2D/RDS.gtexV6p/loci.df.RDS")
 msig.loci.df <- readRDS(file=rds.dir%&%"msig.loci.df.RDS")
 
 ```
@@ -39,7 +39,7 @@ msig.loci.df <- readRDS(file=rds.dir%&%"msig.loci.df.RDS")
 
 append_locus_id <- function(){
   loci.df <- readRDS("/Users/jtorres/Google Drive/Projects/MetaXcan/" %&% 
-                  "MetaXcanT2D/RDS/loci.df.RDS")
+                  "MetaXcanT2D/RDS.gtexV6p/loci.df.RDS")
   locus <- c()
   for (r.gene in loci.df$reported.gene){
     temp.df <- msig.loci.df[grepl(r.gene,msig.loci.df$locus.rep.genes),]
@@ -56,19 +56,19 @@ locus.subset <- function(locnum){
     filter(locus==locnum) %>%   select(-contains("length"), -contains("locus"),
                                                  -contains("tx"),-starts_with("win"))
   chrom <- df$chrom[1]; snp <- df$most.sig.snp[1]; repgene <- df$reported.gene[1]
-  df <- select(df,nearby.gene:CrossTissue); names(df) <- gsub("TW_","",names(df))
+  df <- select(df,nearby.gene:Whole.Blood.DGN); names(df) <- gsub("TW_","",names(df))
   names(df) <- gsub("TS_","",names(df)); names(df) <- gsub("Organ_","",names(df))
   return(df)
 }
 
 get_bonfer_mult_locus <- function(locnum){
-  load("RDS/diag3/metaXcan.results.Rdata")
+  load("RDS.gtexV6p/diag3/metaXcan.results.Rdata")
   l.df <- as.data.frame(locus.subset(locnum),stringsAsFactors=FALSE)
   #vec <- na.omit(as.numeric(as.matrix(l.df)))
   #val <- 0.05/length(vec)
   #return(val)
   gene.vec <- unique(l.df$nearby.gene)
-  temp.df <- filter(p.L.df,Gene %in% gene.vec)
+  temp.df <- filter(p.EN.df,Gene %in% gene.vec)
   p.thresh <- 0.05 / length(na.omit(as.numeric(as.matrix(temp.df[,2:dim(temp.df)[2]]))))
   return (p.thresh)
 }
@@ -112,8 +112,8 @@ make.locus.epacts <- function(locnum,type="TW"){
 }
 
 get_bonfer_sig <- function(){
-  load("RDS/diag3/metaXcan.results.Rdata")
-  p.df <- p.L.df
+  load("RDS.gtexV6p/diag3/metaXcan.results.Rdata")
+  p.df <- p.EN.df
   p.df <- cbind(select(p.df,one_of("Gene","CrossTissue")),
                 select(p.df,contains("TW_")))
   vec <- c()
@@ -442,24 +442,27 @@ save_locus_arrays()
 
 # group1
 filter(msig.loci.df,group==1)$locus
-filter(msig.loci.df,group==3)$locus
-# 6 12 17 23 27 34 36 37 39 51 52 53 56 
-
-locus_6array_plot_upper(c(6,12,17,23,27,34),"GROUP1.part1",set.letter = "")
-locus_6array_plot_upper(c(36,37,39,51,52,53),"GROUP1.part2",set.letter = "")
-locus_6array_plot_upper(c(56),"GROUP1.part3",set.letter = "")
+# 9 18 21 28 30 32 41 42
+locus_6array_plot_upper(c(9,18,21,28,30,32),"GROUP1.part1",set.letter = "")
+locus_6array_plot_upper(c(41,42),"GROUP1.part2",set.letter = "")
 
 # group 2
 filter(msig.loci.df,group==2)$locus
-# 4  5  7 10 19 20 21 22 26 33 40 42 44 48 49 50 55 57
-locus_6array_plot_upper(c(4,5,7,10,19,20),"GROUP2.part1",set.letter = "")
-locus_6array_plot_upper(c(21,22,26,33,40,42),"GROUP2.part2",set.letter = "")
-locus_6array_plot_upper(c(44,48,49,50,55,57),"GROUP2.part3",set.letter = "")
+# 1  4 13 14 15 16 20 31 33 35
+locus_6array_plot_upper(c(1,4,13,14,15,16),"GROUP2.part1",set.letter = "")
+locus_6array_plot_upper(c(20,31,33,35),"GROUP2.part2",set.letter = "")
 
 # group 3
+filter(msig.loci.df,group==3)$locus
+# 8 10 22 26
+locus_6array_plot_upper(c(8,10,22,26),"GROUP3.part1",set.letter = "")
+
+# group 4
 filter(msig.loci.df,group==4)$locus
-# 1 11 14 38 41 43
-locus_6array_plot_upper(c(1,11,14,38,41,43),"GROUP4.part1",set.letter = "")
+# 2  5  7 12 17 23 24 27 34 38 40 46 47
+locus_6array_plot_upper(c(2,5,7,12,17,23),"GROUP4.part1",set.letter = "")
+locus_6array_plot_upper(c(24,27,34,38,40,46),"GROUP4.part2",set.letter = "")
+locus_6array_plot_upper(c(47),"GROUP4.part3",set.letter = "")
 
 
 ```

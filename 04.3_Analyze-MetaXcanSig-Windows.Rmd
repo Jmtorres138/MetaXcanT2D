@@ -19,11 +19,21 @@ library("dplyr")
 library("data.table")
 library("ggplot2")
 library("gridExtra")
-rds.dir <- "/Users/jtorres/Google Drive/Projects/MetaXcan/MetaXcanT2D/RDS/"
-fig.dir <- "/Users/jtorres/Google Drive/Projects/MetaXcan/MetaXcanT2D/figures/"
+rds.dir <- "/Users/jtorres/Google Drive/Projects/MetaXcan/MetaXcanT2D/RDS.gtexV6p/"
+fig.dir <- "/Users/jtorres/Google Drive/Projects/MetaXcan/MetaXcanT2D/figures.gtexV6p/"
 "%&%" <- function(a,b) paste0(a,b)
 
 mtxn.sig.loci.df <- readRDS(file=rds.dir%&%"mtxn.sig.loci.df.RDS")
+
+server.dir <- "/Volumes/im-lab/nas40t2/jason/projects/ReferenceData/UCSC/"
+gencode.path <- server.dir %&%  "GENCODE.Genes.V19.Basic.annotated.txt.gz"
+gencode.ref.df <- fread("cat " %&% gencode.path %&% " | zmore")
+
+gene2ensid <- function(mygene){
+  #genename <- filter(ensid.genename.key.df,gene==mygene)$ensid
+  genename <- filter(gencode.ref.df,hg19.wgEncodeGencodeAttrsV19.geneName==mygene)$hg19.wgEncodeGencodeAttrsV19.geneId[1]
+  return(genename)
+}
 
 ```
 
@@ -109,27 +119,27 @@ Determine genes:model pairs for deeper characterization
 
 ```{r prioritize, echo=FALSE}
 
-make_ensid_ref <- function(){
-  pre1 <- "/Volumes/im-lab/nas40t2/jason/projects/MetaXcan/db_files/gtex/alpha_"
-  pre2 <- "/allResults/ensid_gene_key.txt.gz"
-  f1 <- pre1 %&% 0.5 %&% pre2
-  f2 <- pre1 %&% 1 %&% pre2
-  arg1 <- "cat " %&% f1 %&% " | zmore"
-  arg2 <- "cat " %&% f2 %&% " | zmore"
-  df1 <- fread(arg1); df2 <- fread(arg2)
-  df <- rbind(df1,df2) 
-  df <- df[!duplicated(df), ]
-  saveRDS(df,paste0(rds.dir,"ensid.genename.key.df.RDS"))
-  print("saved RDS file")
-}
-make_ensid_ref()
-ensid.genename.key.df <- readRDS(paste0(rds.dir,"ensid.genename.key.df.RDS"))
+#make_ensid_ref <- function(){
+#  pre1 <- "/Volumes/im-lab/nas40t2/jason/projects/MetaXcan/db_files/gtex/alpha_"
+#  pre2 <- "/allResults/ensid_gene_key.txt.gz"
+#  f1 <- pre1 %&% 0.5 %&% pre2
+#  f2 <- pre1 %&% 1 %&% pre2
+#  arg1 <- "cat " %&% f1 %&% " | zmore"
+#  arg2 <- "cat " %&% f2 %&% " | zmore"
+#  df1 <- fread(arg1); df2 <- fread(arg2)
+#  df <- rbind(df1,df2) 
+#  df <- df[!duplicated(df), ]
+#  saveRDS(df,paste0(rds.dir,"ensid.genename.key.df.RDS"))
+#  print("saved RDS file")
+#}
+#make_ensid_ref()
+#ensid.genename.key.df <- readRDS(paste0(rds.dir,"ensid.genename.key.df.RDS"))
 
-gene2ensid <- function(mygene){
-  ensid.genename.key.df <- readRDS(paste0(rds.dir,"ensid.genename.key.df.RDS"))
-  genename <- filter(ensid.genename.key.df,gene==mygene)$ensid
-  return(genename)
-}
+#gene2ensid <- function(mygene){
+#  ensid.genename.key.df <- readRDS(paste0(rds.dir,"ensid.genename.key.df.RDS"))
+#  genename <- filter(ensid.genename.key.df,gene==mygene)$ensid
+#  return(genename)
+#}
 
 prioritize <- function(){
   df <- filter(msig.loci.df,group=="1")
@@ -160,7 +170,7 @@ prioritize <- function(){
                                 locstart.vec,locend.vec,gene.vec,mod.vec))
   names(out.df) <- c("chrom","locus","locus.start","locus.end","gene","model")
   #make_ensid_ref()
-  ensid.genename.key.df <- readRDS(paste0(rds.dir,"ensid.genename.key.df.RDS"))
+  #ensid.genename.key.df <- readRDS(paste0(rds.dir,"ensid.genename.key.df.RDS"))
   ensid <- c()
   for (g in out.df$gene){
     eid <- gene2ensid(g)
@@ -179,7 +189,7 @@ prioritize <- function(){
 }
 
 group1.genemods.df <- prioritize()
-write.table(group1.genemods.df,file="/Volumes/im-lab/nas40t2/jason/projects/MetaXcan/results/predictors/by_locus/group1_genemods.txt",sep="\t",quote = FALSE,row.names=FALSE)
+write.table(group1.genemods.df,file="/Volumes/im-lab/nas40t2/jason/projects/MetaXcan/results/predictors/by_locus/gtexV6p/group1_genemods.txt",sep="\t",quote = FALSE,row.names=FALSE)
 
 ```
 
@@ -221,8 +231,8 @@ all_genemods <- function(){
   out.df <- as.data.frame(cbind(chrom.vec,locus.vec,
                                 locstart.vec,locend.vec,gene.vec,mod.vec))
   names(out.df) <- c("chrom","locus","locus.start","locus.end","gene","model")
-  make_ensid_ref()
-  ensid.genename.key.df <- readRDS(paste0(rds.dir,"ensid.genename.key.df.RDS"))
+  #make_ensid_ref()
+  #ensid.genename.key.df <- readRDS(paste0(rds.dir,"ensid.genename.key.df.RDS"))
   ensid <- c()
   for (g in as.character(out.df$gene)){
     if (is.na(g)){
@@ -251,7 +261,7 @@ all_genemods <- function(){
 }
 
 genemods.df <- all_genemods()
-write.table(genemods.df,file="/Volumes/im-lab/nas40t2/jason/projects/MetaXcan/results/predictors/by_locus/genemods.txt",sep="\t",quote = FALSE,row.names=FALSE)
+write.table(genemods.df,file="/Volumes/im-lab/nas40t2/jason/projects/MetaXcan/results/predictors/by_locus/gtexV6p/genemods.txt",sep="\t",quote = FALSE,row.names=FALSE)
 
 
 
