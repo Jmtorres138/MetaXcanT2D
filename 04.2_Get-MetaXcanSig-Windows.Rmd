@@ -23,7 +23,7 @@ library("dplyr")
 "%&%" <- function(a,b) paste0(a,b)
 
 root.dir <- "/Users/jtorres/Google Drive/Projects/MetaXcan/MetaXcanT2D/"
-rds.dir <- root.dir %&% "RDS/"
+rds.dir <- root.dir %&% "RDS.gtexV6p/"
 T2Dcore.df <- readRDS(rds.dir %&% "T2Dcore.df.RDS")
 
 ref.df <- readRDS(rds.dir %&% "non.overlapping.t2dLoci.ref.df.RDS")
@@ -56,7 +56,7 @@ append_uni_sig <- function(){
   for (i in 1:dim(ref.df)[1]){
     gene.vec <- strsplit(ref.df$locus.genes[i],",")[[1]]
     temp.df <- filter(res.df,diag.bonfer==TRUE,gene %in% gene.vec)
-    if (dim(temp.df)!=0){
+    if (dim(temp.df)[1]!=0){
       gstring <- paste(temp.df$gene,collapse=",")
       mstring <- paste(temp.df$model,collapse=",")
       mtxn.sig.uni.genes <- append(mtxn.sig.uni.genes,gstring) 
@@ -78,7 +78,7 @@ append_gw_sig <- function(){
     gene.vec <- strsplit(ref.df$locus.genes[i],",")[[1]]
     #temp.df <- filter(res.df,diag.bonfer==TRUE,gene %in% gene.vec)
     temp.df <- filter(res.df,diag.mult.correct==TRUE,gene %in% gene.vec)
-    if (dim(temp.df)!=0){
+    if (dim(temp.df)[1]!=0){
       gstring <- paste(temp.df$gene,collapse=",")
       mstring <- paste(temp.df$model,collapse=",")
       mtxn.sig.gw.genes <- append(mtxn.sig.gw.genes,gstring) 
@@ -100,7 +100,7 @@ Now, will determine the non-overlapping genomic windows with locus-wide MetaXcan
 
 ```{r lw_sig, echo=FALSE}
 
-load("RDS/diag3/metaXcan.results.Rdata")
+load("RDS.gtexV6p/diag3/metaXcan.results.Rdata")
 
 append_lw_sig <- function(){
   ref.gw.df <- append_gw_sig()
@@ -111,7 +111,7 @@ append_lw_sig <- function(){
 
   for (i in 1:dim(ref.gw.df)[1]){
     gene.vec <- strsplit(ref.gw.df$locus.genes[i],",")[[1]]
-    temp.df <- filter(p.L.df,Gene %in% gene.vec)
+    temp.df <- filter(p.EN.df,Gene %in% gene.vec)
     p.thresh <- 0.05 / length(na.omit(as.numeric(as.matrix(temp.df[,2:dim(temp.df)[2]]))))
     gene.vec <- temp.df$Gene; mod.vec <- names(temp.df)[2:dim(temp.df)[2]]
     track.genes <- c()
