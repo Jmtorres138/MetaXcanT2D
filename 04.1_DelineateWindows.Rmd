@@ -23,21 +23,22 @@ library(gridExtra)
 "%&%" <- function(a,b) paste0(a,b)
 
 root.dir <- "/Users/jtorres/Google Drive/Projects/MetaXcan/MetaXcanT2D/"
-rds.dir <- root.dir %&% "RDS/"
+rds.dir <- root.dir %&% "RDS.gtexV6p/"
 
-loci.df <- (readRDS(root.dir %&% "RDS/loci.df.RDS")) %>% select(chrom:nearby.txend)
+loci.df <- (readRDS(root.dir %&% "RDS.gtexV6p/loci.df.RDS")) %>% select(chrom:nearby.txend)
 
 ```
 
 
 Here are what the windows look like: 
 
-```{r show_89_T2D_gene_loci_windows, echo=FALSE, fig.height=8,fig.width=14}
+```{r show_T2D_gene_loci_windows, echo=FALSE, fig.height=8,fig.width=14}
 
 win.df <- select(loci.df, one_of("chrom","win.start","win.end"))
 win.df <- win.df[!duplicated(win.df),]
 win.df <- group_by(win.df,chrom,win.start) %>% arrange(chrom, win.start)
-index <- 1:89 ; win.df <- cbind(index,win.df)
+win.df <- as.data.frame(win.df)
+index <- 1:dim(win.df)[1]; win.df <- cbind(index,win.df)
 
 plt <- ggplot(data=win.df,aes(x=index)) +
   geom_errorbar(aes(ymin=(win.start/10^6),ymax=(win.end/10^6))) + 
@@ -91,12 +92,21 @@ delineate_per_chrom_multi <- function(win.df){
   win.end.vec <- c() 
   locnum <- 0 
   interval <- FALSE
+  # The use of replace vec is to deal with rare case when end2 < end1 in an interval 
+  replace.vec1 <- c() 
+  replace.vec2 <- c() 
   for (i in 1:(length(win.df$index)-1)){
     start1 <- win.df$win.start[i]
     end1 <- win.df$win.end[i]
     start2 <- win.df$win.start[i+1]
     end2 <- win.df$win.end[i+1]
     # test for overlap
+    if (end2 < end1){
+      print(c(end2,end1))
+      replace.vec1 <- append(replace.vec1,end2)
+      replace.vec2 <- append(replace.vec2,end1)
+      print(length(replace.vec1))
+    }
     if (interval==FALSE & start2 > end1){
       locnum <- locnum + 1
       loc.vec <- append(loc.vec,locnum)
@@ -125,12 +135,19 @@ delineate_per_chrom_multi <- function(win.df){
   }
   out.df <- as.data.frame(cbind(loc.vec,win.start.vec,win.end.vec))
   names(out.df) <- c("locus","locus.start","locus.end")
+  print(length(replace.vec1))
+  if (length(replace.vec1) > 0){
+    for (i in 1:length(replace.vec1)){
+      out.df$locus.end <- gsub(replace.vec1[i],replace.vec2[i],out.df$locus.end)  
+    }
+    out.df$locus.end <- as.integer(out.df$locus.end)
+  }
   return(out.df)
 }
 
-#test.df <- filter(win.df,chrom==2)
-#test <- delineate_per_chrom_multi(test.df)
-#test.df; test 
+#delineate_per_chrom_multi(temp.df)
+
+
 
 delineate_all <- function(full.win.df){
   chrom.vec <- sort(unique(full.win.df$chrom))
