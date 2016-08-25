@@ -17,7 +17,7 @@ library("dplyr")
 library("data.table")
 library("qvalue")
 work.dir <- "/Users/jtorres/Google Drive/Projects/MetaXcan/MetaXcanT2D/"
-rds.dir <- work.dir %&% "RDS/" 
+rds.dir <- work.dir %&% "RDS.gtexV6p/" 
 ```
 
 
@@ -26,9 +26,9 @@ Identify genome-wide significant associations in DIAGRAM
 ```{r diagram, echo=FALSE}
 get_gw_sig <- function(){
   load(rds.dir%&%"diag3/metaXcan.results.Rdata")
-  gene.vec <- p.L.df$Gene
-  mod.vec <- names(p.L.df)[2:length(names(p.L.df))]
-  p.mat <- as.matrix(p.L.df[,2:dim(p.L.df)[2]])
+  gene.vec <- p.EN.df$Gene
+  mod.vec <- names(p.EN.df)[2:length(names(p.EN.df))]
+  p.mat <- as.matrix(p.EN.df[,2:dim(p.EN.df)[2]])
   num.tests <- length(na.omit(as.numeric(p.mat)))
   gw.thresh <- 0.05 / num.tests
   sig.genes <- c()
@@ -64,9 +64,9 @@ Determine which associations replicate in GERA at genome-wide signficance, pvalu
 append_gera_p_and_gw <- function(df){
   # df must be in the format as output from get_gw_sig() 
   load(rds.dir%&%"gera/metaXcan.results.Rdata")
-  gene.vec <- p.L.df$Gene
-  mod.vec <- names(p.L.df)[2:length(names(p.L.df))]
-  p.mat <- as.matrix(p.L.df[,2:dim(p.L.df)[2]])
+  gene.vec <- p.EN.df$Gene
+  mod.vec <- names(p.EN.df)[2:length(names(p.EN.df))]
+  p.mat <- as.matrix(p.EN.df[,2:dim(p.EN.df)[2]])
   num.tests <- length(na.omit(as.numeric(p.mat)))
   gw.thresh <- 0.05 / num.tests
   gera.p <- c() 
@@ -78,9 +78,9 @@ append_gera_p_and_gw <- function(df){
   for (i in 1:dim(df)[1]){
     gene <- df[i,1]
     mod <- df[i,2]
-    p.df <- filter(p.L.df,Gene==gene) %>% select(one_of(mod))
+    p.df <- filter(p.EN.df,Gene==gene) %>% select(one_of(mod))
     pval <- as.numeric(as.matrix(p.df))
-    q.df <- filter(q.L.df,Gene==gene) %>% select(one_of(mod))
+    q.df <- filter(q.EN.df,Gene==gene) %>% select(one_of(mod))
     qval <- as.numeric(as.matrix(q.df))
     if (!is.na(pval) & pval <= gw.thresh){
       rep <- TRUE 
@@ -139,10 +139,11 @@ reformat_df_add_q <- function(dataset.name){
   } else{
     print("dataset.name must be DIAGRAM or GERA")
   }
-  p.mat <- as.matrix(p.L.df[,2:dim(p.L.df)[2]])
+  p.mat <- as.matrix(p.EN.df[,2:dim(p.EN.df)[2]])
   gene <- c() 
   model <- c() 
   p.value <- c() 
+  p.df <- p.EN.df
   gene.vec <- p.df$Gene
   mod.vec <- names(p.df)[2:dim(p.df)[2]]
   for (e in 1:length(mod.vec)){
@@ -188,9 +189,9 @@ get_gw_thresh <- function(dataset){
   } else{
     print("dataset must be DIAGRAM or GERA")
   }
-  gene.vec <- p.L.df$Gene
-  mod.vec <- names(p.L.df)[2:length(names(p.L.df))]
-  p.mat <- as.matrix(p.L.df[,2:dim(p.L.df)[2]])
+  gene.vec <- p.EN.df$Gene
+  mod.vec <- names(p.EN.df)[2:length(names(p.EN.df))]
+  p.mat <- as.matrix(p.EN.df[,2:dim(p.EN.df)[2]])
   num.tests <- length(na.omit(as.numeric(p.mat)))
   gw.thresh <- 0.05 / num.tests
   return(gw.thresh)
@@ -216,13 +217,6 @@ saveRDS(gw.rep_alt.df,file=rds.dir%&%"gw.rep_alt.df.RDS")
 ```
 
 
-**NOTE**: The alternative approach, though more stringent, yields the same number of associations that replicate at FDR<=5% (11), and two less associations at FDR<=10% (12 vs 14; lose CAMK1D and JAZF1) and FDR<=20% (17 vs 19; lose HHEX, HMG20A, RCCD1), respectively.  
-
-The 7 genes that replicate at FDR<=5%: "GPAM"    "HOXA5"   "PLEKHS1" "PPARG"   "SOX4"    "TCF7L2"  "WFS1"
-
-The 4 genes that replicate at genome-wide signficance: "GPAM"    "HOXA5"   "PLEKHS1" "TCF7L2"
-
-
 
 # Locus-wide replication
 
@@ -243,12 +237,12 @@ get_msig_df <- function(){
 make_gera_lw_rep_df <- function(){
   df <- get_msig_df()
   load(rds.dir%&%"diag3/metaXcan.results.Rdata")
-  diag.p.df <- p.L.df
-  diag.z.df <- z.L.df 
+  diag.p.df <- p.EN.df
+  diag.z.df <- z.EN.df 
   load(rds.dir%&%"gera/metaXcan.results.Rdata")
-  gera.p.df <- p.L.df  
-  gera.z.df <- z.L.df 
-  rm(p.L.df,q.L.df,z.L.df)
+  gera.p.df <- p.EN.df  
+  gera.z.df <- z.EN.df 
+  rm(p.EN.df,q.EN.df,z.EN.df)
   all.df <- readRDS(file=rds.dir%&%"reform.df.RDS")  
   gene <- c()
   model <- c()

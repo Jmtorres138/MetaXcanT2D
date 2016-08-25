@@ -1,5 +1,5 @@
 ---
-title: "07.1_GSEA-DIAGRAM.Rmd"
+title: "05.2_GSEA-DIAGRAM.Rmd"
 author: "Jason Torres"
 date: "May 17, 2015"
 output:
@@ -23,8 +23,8 @@ library("dplyr")
 library("ggplot2")
 library("qvalue")
 "%&%" <- function(a,b) paste0(a,b) 
-rds.dir <- "/Users/jtorres/Google Drive/Projects/MetaXcan/MetaXcanT2D/RDS/" 
-txt.dir <- "/Users/jtorres/Google Drive/Projects/MetaXcan/MetaXcanT2D/txt/diag3/" 
+rds.dir <- "/Users/jtorres/Google Drive/Projects/MetaXcan/MetaXcanT2D/RDS.gtexV6p/" 
+txt.dir <- "/Users/jtorres/Google Drive/Projects/MetaXcan/MetaXcanT2D/txt.gtexV6p/diag3/" 
 core.df <- readRDS(paste0(rds.dir,"diag3/core.df.RDS"))
 ggd.ref.df <- readRDS(paste0(rds.dir,"diag3/ggd.ref.df.RDS"))
 ```

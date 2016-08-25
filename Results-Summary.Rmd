@@ -9,7 +9,7 @@ Here, I summarize key results to discuss in the manuscript:
 
 # Results at T2D loci 
 
-Referring to the top 1000 SNPs from the DIAGRAM trans-ethnic meta-analysis of GWAS (accessed from AMP-T2D, 2016), considered the set of 89 genes that were annotated to these genes. For each annotated gene (reported T2D gene implicated by proximity to GWAS signal), considered the set of GWAS SNPs annotated to this gene, noted the most distal SNPs on the terminal ends w/ respect to each other. Then expanded the window by 1Mb (i.e. 89 windows). Then delineated non-overlapping windows as the boundaries of the gene loci windows overlapped in several instances. This resulted in 57 unique, non-overlapping windows. We consider all genome-wide and locus-wide (w/ respect to tests performed within the non-overlapping window) gene-level associations. 
+Referring to the top SNPs ($p \leq 1 * 10^{-6}$) from the DIAGRAM trans-ethnic meta-analysis of GWAS (accessed from AMP-T2D, 2016), considered the set of 72 genes that were annotated to these genes. For each annotated gene (reported T2D gene implicated by proximity to GWAS signal), considered the set of GWAS SNPs annotated to this gene, noted the most distal SNPs on the terminal ends w/ respect to each other. Then expanded the window by 1Mb (i.e. 72 windows). Then delineated non-overlapping windows as the boundaries of the gene loci windows overlapped in several instances. This resulted in 42 unique, non-overlapping windows. We consider all genome-wide and locus-wide (w/ respect to tests performed within the non-overlapping window) gene-level associations. 
 
 ```{r t2d_loci, echo=FALSE}
 
@@ -19,7 +19,7 @@ library("data.table")
 library("dplyr")
 
 file.dir <- "/Users/jtorres/Google Drive/Projects/MetaXcan/MetaXcanT2D/"
-rds.dir <- file.dir %&% "RDS/"
+rds.dir <- file.dir %&% "RDS.gtexV6p/"
 df1 <- readRDS(rds.dir %&% "msig.loci.df.RDS")
 rep.genes <- unique(readRDS(rds.dir %&% "loci.df.RDS")$reported.gene)
 
