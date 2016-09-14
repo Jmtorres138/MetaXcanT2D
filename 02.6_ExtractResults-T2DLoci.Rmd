@@ -1,5 +1,5 @@
 ---
-title: "00.9_ExtractResults-T2DLoci.Rmd"
+title: "ExtractResults-T2DLoci.Rmd"
 author: "Jason Torres"
 date: "August 23, 2016"
 output:

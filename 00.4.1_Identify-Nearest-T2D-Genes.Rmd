@@ -1,5 +1,5 @@
 ---
-title: "identify-nearest-t2D-genes.Rmd"
+title: "00.4.1.Identify-Nearest-T2D-Genes.Rmd"
 author: "Jason Torres"
 date: "August 18, 2016"
 output:
@@ -16,6 +16,8 @@ The protocol:
 
 * Identify bonferonni-signficant SNPs 
 * Use Gencode v19 file to determine the nearest gene for each SNP 
+
+NOTE: **10min6** actually denotes $5 * 10^(-6)$ !!!
 
 
 ```{r setup, echo=FALSE}
@@ -45,7 +47,7 @@ diag37.df <- fread("cat " %&% diag37.path %&% " | zmore")
 bonfer <- 0.05 / dim(diag37.df)[1]
 diag37.bonfer.df <- filter(diag37.df,P<=bonfer)
 # 10^(-6) threshodl 
-diag37.10min6.df <- filter(diag37.df,P<=(10^(-6)))
+diag37.10min6.df <- filter(diag37.df,P<=(5 * 10^(-6)))
 
 write.table(diag37.bonfer.df$SNP,file=txt.dir%&%"diag37.bonfer-snps.txt",
             quote=FALSE,sep="\t",row.names=FALSE,

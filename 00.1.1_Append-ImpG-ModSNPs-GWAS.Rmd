@@ -40,7 +40,7 @@ get_all_mod_snps <- function(){
 }
 
 snp.vec <- get_all_mod_snps()
-saveRDS(snp.vec,file="/Volumes/im-lab/nas40t2/jason/projects/MetaXcan/" %&% "db_files/gtex_vp6/alpha_0.5/allBetas/all_tw_modSNPs.RDS")
+saveRDS(snp.vec,file="/Volumes/im-lab/nas40t2/jason/projects/MetaXcan/db_files/gtex_v6p/alpha_0.5/allBetas/all_tw_modSNPs.RDS")
 ```
 
 

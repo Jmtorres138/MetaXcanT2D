@@ -1,5 +1,5 @@
 ---
-title: "00.7_Extract-T2DLoci-Results.Rmd"
+title: "00.4.2_Make-T2DLociGenes-Dataframe.Rmd"
 author: "Jason Torres"
 date: "August 22, 2016"
 output:

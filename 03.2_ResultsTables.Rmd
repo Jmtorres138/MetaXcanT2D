@@ -393,18 +393,18 @@ save_metaXcan_bonfer_single_plots <- function(){
   plt4 <- metaXcan_table_plot(T2Dcore.df[87:110,])
   savename <- fig.dir %&% "bonfer-single-tab_p" %&% 4 %&% ".pdf"
   ggsave(filename=savename,plot=plt4,height=15,width=11)   
-  plt5 <- metaXcan_table_plot(T2Dcore.df[110:130,])
+  plt5 <- metaXcan_table_plot(T2Dcore.df[110:124,])
   savename <- fig.dir %&% "bonfer-single-tab_p" %&% 5 %&% ".pdf" 
   ggsave(filename=savename,plot=plt5,height=15,width=11) 
-  plt6 <- metaXcan_table_plot(T2Dcore.df[131:150,])
-  savename <- fig.dir %&% "bonfer-single-tab_p" %&% 6 %&% ".pdf" 
-  ggsave(filename=savename,plot=plt6,height=15,width=11) 
-  plt7 <- metaXcan_table_plot(T2Dcore.df[151:164,])
-  savename <- fig.dir %&% "bonfer-single-tab_p" %&% 7 %&% ".pdf" 
-  ggsave(filename=savename,plot=plt7,height=15,width=11) 
-  plt8 <- metaXcan_table_plot(T2Dcore.df[165:180,])
-  savename <- fig.dir %&% "bonfer-single-tab_p" %&% 8 %&% ".pdf" 
-  ggsave(filename=savename,plot=plt8,height=15,width=11) 
+  #plt6 <- metaXcan_table_plot(T2Dcore.df[131:150,])
+  #savename <- fig.dir %&% "bonfer-single-tab_p" %&% 6 %&% ".pdf" 
+  #ggsave(filename=savename,plot=plt6,height=15,width=11) 
+  #plt7 <- metaXcan_table_plot(T2Dcore.df[151:164,])
+  #savename <- fig.dir %&% "bonfer-single-tab_p" %&% 7 %&% ".pdf" 
+  #ggsave(filename=savename,plot=plt7,height=15,width=11) 
+  #plt8 <- metaXcan_table_plot(T2Dcore.df[165:180,])
+  #savename <- fig.dir %&% "bonfer-single-tab_p" %&% 8 %&% ".pdf" 
+  #ggsave(filename=savename,plot=plt8,height=15,width=11) 
 }
 
 
@@ -420,12 +420,12 @@ save_metaXcan_bonfer_plots <- function(){
   plt1 <- metaXcan_table_plot(T2Dcore.df[1:25,])
   savename <- fig.dir %&% "bonfer-all-tab_p" %&% 1 %&% ".pdf"
   ggsave(filename=savename,plot=plt1,height=15,width=11)  
-  plt2 <- metaXcan_table_plot(T2Dcore.df[26:50,])
+  plt2 <- metaXcan_table_plot(T2Dcore.df[26:49,])
   savename <- fig.dir %&% "bonfer-all-tab_p" %&% 2 %&% ".pdf"
   ggsave(filename=savename,plot=plt2,height=15,width=11)   
-  plt3 <- metaXcan_table_plot(T2Dcore.df[51:57,])
-  savename <- fig.dir %&% "bonfer-all-tab_p" %&% 3 %&% ".pdf"
-  ggsave(filename=savename,plot=plt3,height=15,width=11) 
+  #plt3 <- metaXcan_table_plot(T2Dcore.df[,])
+  #savename <- fig.dir %&% "bonfer-all-tab_p" %&% 3 %&% ".pdf"
+  #ggsave(filename=savename,plot=plt3,height=15,width=11) 
 }
 
 save_metaXcan_bonfer_plots()

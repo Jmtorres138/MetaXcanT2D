@@ -442,27 +442,26 @@ save_locus_arrays()
 
 # group1
 filter(msig.loci.df,group==1)$locus
-# 9 18 21 28 30 32 41 42
-locus_6array_plot_upper(c(9,18,21,28,30,32),"GROUP1.part1",set.letter = "")
-locus_6array_plot_upper(c(41,42),"GROUP1.part2",set.letter = "")
+#  8  9 18 21 28 30 32 41 42
+locus_6array_plot_upper(c(8,9,18,21,28,30),"GROUP1.part1",set.letter = "")
+locus_6array_plot_upper(c(32,41,42),"GROUP1.part2",set.letter = "")
 
 # group 2
 filter(msig.loci.df,group==2)$locus
-# 1  4 13 14 15 16 20 31 33 35
-locus_6array_plot_upper(c(1,4,13,14,15,16),"GROUP2.part1",set.letter = "")
-locus_6array_plot_upper(c(20,31,33,35),"GROUP2.part2",set.letter = "")
+# 1  3  6 13 31 33 35 40
+locus_6array_plot_upper(c(1,3,6,13,31,33),"GROUP2.part1",set.letter = "")
+locus_6array_plot_upper(c(35,40),"GROUP2.part2",set.letter = "")
 
 # group 3
 filter(msig.loci.df,group==3)$locus
-# 8 10 22 26
-locus_6array_plot_upper(c(8,10,22,26),"GROUP3.part1",set.letter = "")
+# 15 24 26
+locus_6array_plot_upper(c(15,24,26),"GROUP3.part1",set.letter = "")
 
 # group 4
 filter(msig.loci.df,group==4)$locus
-# 2  5  7 12 17 23 24 27 34 38 40 46 47
-locus_6array_plot_upper(c(2,5,7,12,17,23),"GROUP4.part1",set.letter = "")
-locus_6array_plot_upper(c(24,27,34,38,40,46),"GROUP4.part2",set.letter = "")
-locus_6array_plot_upper(c(47),"GROUP4.part3",set.letter = "")
+# 16 17 20 22 27 34 38 46
+locus_6array_plot_upper(c(16,17,20,22,27,34),"GROUP4.part1",set.letter = "")
+locus_6array_plot_upper(c(38,46),"GROUP4.part2",set.letter = "")
 
 
 ```
