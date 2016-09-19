@@ -179,21 +179,6 @@ gsea_nonparam <- function(named.int.vec,savename){
 
 ```{r run_analyses, echo=FALSE}
 
-make_gsea_inputs(geneset,"p05")
-int.vec <- readRDS(rds.dir%&%"p05.int.vec.RDS")
-gsea_nonparam(int.vec,"gsea.p05.df")
-gsea.df <- readRDS(rds.dir%&%"gsea.p05.df")
-
-make_gsea_inputs(geneset.t2d,"p05.t2d")
-int.vec <- readRDS(rds.dir%&%"p05.t2d.int.vec.RDS")
-gsea_nonparam(int.vec,"gsea.p05.t2d.df")
-gsea.t2d.df <- readRDS(rds.dir%&%"gsea.p05.t2d.df")
-
-make_gsea_inputs(geneset.novel,"p05.novel")
-int.vec <- readRDS(rds.dir%&%"p05.novel.int.vec.RDS")
-gsea_nonparam(int.vec,"gsea.p05.novel.df")
-gsea.novel.df <- readRDS(rds.dir%&%"gsea.p05.novel.df")
-
 append_qvals <- function(df){
   df <- filter(df,ontology=="BP")
   num <- dim(df)[1]
@@ -205,7 +190,30 @@ append_qvals <- function(df){
   return(out.df)
 }
 
-test <- append_qvals(gsea.df)
+make_gsea_inputs(geneset,"p05")
+int.vec <- readRDS(rds.dir%&%"p05.int.vec.RDS")
+gsea_nonparam(int.vec,"gsea.p05.df.RDS")
+gsea.df <- readRDS(rds.dir%&%"gsea.p05.df.RDS")
+gsea.df <- append_qvals(gsea.df)
+saveRDS(gsea.df, rds.dir%&%"gsea.p05.df.RDS")
+
+make_gsea_inputs(geneset.t2d,"p05.t2d")
+int.vec <- readRDS(rds.dir%&%"p05.t2d.int.vec.RDS")
+gsea_nonparam(int.vec,"gsea.p05.t2d.df.RDS")
+gsea.t2d.df <- readRDS(rds.dir%&%"gsea.p05.t2d.df.RDS")
+gsea.t2d.df <- append_qvals(gsea.t2d.df)
+saveRDS(gsea.t2d.df, rds.dir%&%"gsea.p05.t2d.df.RDS")
+
+
+make_gsea_inputs(geneset.novel,"p05.novel")
+int.vec <- readRDS(rds.dir%&%"p05.novel.int.vec.RDS")
+gsea_nonparam(int.vec,"gsea.p05.novel.df.RDS")
+gsea.novel.df <- readRDS(rds.dir%&%"gsea.p05.novel.df.RDS")
+gsea.novel.df <- append_qvals(gsea.novel.df)
+saveRDS(gsea.novel.df, rds.dir%&%"gsea.p05.novel.df.RDS")
+
+
+#test <- append_qvals(gsea.df)
 ```
 
 

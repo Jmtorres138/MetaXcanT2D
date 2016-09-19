@@ -1,17 +1,22 @@
 ---
 title: "Results-Summary.Rmd"
 author: "Jason Torres"
-date: "August 8, 2016"
+date: "September 19, 2016"
 output: pdf_document
 ---
 
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
 Here, I summarize key results to discuss in the manuscript: 
 
-# Results at T2D loci in DIAGRAM 
 
-Referring to the top SNPs ($p \leq 5 * 10^{-6}$) from the DIAGRAM trans-ethnic meta-analysis of GWAS (accessed from AMP-T2D, 2016), considered the set of 111 genes that were annotated to these genes. For each annotated gene (reported T2D gene implicated by proximity to GWAS signal), considered the set of GWAS SNPs annotated to this gene, noted the most distal SNPs on the terminal ends w/ respect to each other. Then expanded the window by 1Mb (i.e. 111 windows). Then delineated non-overlapping windows as the boundaries of the gene loci windows overlapped in several instances. This resulted in 68 unique, non-overlapping windows. We consider all genome-wide and locus-wide (w/ respect to tests performed within the non-overlapping window) gene-level associations. 
+# Setup
 
-```{r t2d_loci, echo=FALSE}
+GTEx V6p; HapMap SNPs; Prediction q-value <= 0.05 
+
+```{r libraries}
 
 "%&%" <- function(a,b) paste0(a,b)
 
@@ -20,33 +25,11 @@ library("dplyr")
 
 file.dir <- "/Users/jtorres/Google Drive/Projects/MetaXcan/MetaXcanT2D/"
 rds.dir <- file.dir %&% "RDS.gtexV6p/"
-df1 <- readRDS(rds.dir %&% "msig.loci.df.RDS")
+ggd.df <- readRDS(rds.dir%&%"ggd.ref.df.RDS")
 rep.genes <- unique(readRDS(rds.dir %&% "loci.df.RDS")$reported.gene)
-
+loci.df <- readRDS(rds.dir%&%"loci.df.RDS")
 ```
 
-
-### Genome-wide significant vs locus-wide significant 
-
-There are **`r dim(df1)[1]`** non-overlapping T2D loci, of which:
-
-**`r length(na.omit(df1$mtxn.sig.gw.genes))`** have genome-wide significant (across all models) MetaXcan associations 
-
-**`r length(na.omit(df1$mtxn.sig.lw.genes))`** have locus-wide significant (across all models) MetaXcan associations 
-
-### Locus profile 
-
-There are **`r dim(filter(df1,group==1))[1]`** loci where _at least one_ reported gene yielded a genome-wide signficant association
-
-There are **`r dim(filter(df1,group==2))[1]`** loci where _at least one_ reported gene yielded a locus-wide **but not genome-wide signficant** association 
-
-There are **`r dim(filter(df1,group==3))[1]`** loci where an unreported T2D gene yielded a genome-wide association but no reported gene yielded an association an any signifcance level
-
-There are **`r dim(filter(df1,group==4))[1]`** loci where an unreported T2D gene yielded a locus-wide association but no reported gene yielded an association an any signifcance level
-
-There are **`r dim(df1[is.na(df1$group),])[1]`** loci where there are **no significant associations** 
-
-## Genome-wide Signifcant genes and models 
 
 ```{r ebi_nhgri, echo=FALSE}
 
@@ -63,9 +46,161 @@ for (r in ebi.df$genes){
 }
 ref.vec <- unique(ref.vec)
 rep.genes <- unique(append(rep.genes,ref.vec))
+
 ```
 
 
+
+# Genome-wide Signifant associations 
+
+## Bonferonni-adjusted for the total number of tests performed across all tissue models 
+
+```{r gw, echo=FALSE}
+
+df <- readRDS(rds.dir %&% "T2Dcore.df.RDS")
+df <- filter(df, diag.mult.correct==TRUE)
+```
+ 
+There are **`r dim(df)[1]`** GENOME-WIDE associations
+
+This corresponds to **`r length(unique(df$gene))`** unique genes 
+
+Of these genes, **`r length(unique(df$gene[df$gene %in% rep.genes]))`** genes are nearest to GWAS associations ($p \leq 5 \times 10^{-6}$) and **`r length(unique(df$gene[!(df$gene %in% rep.genes)]))`** are not _nearest to GWAS associations_ genes 
+
+_Nearest to GWAS hits_ genes: 
+
+```{r}
+
+unique(df$gene[df$gene %in% rep.genes])
+
+```
+
+_Not Nearest_ genes: 
+
+```{r}
+
+unique(df$gene[!(df$gene %in% rep.genes)])
+
+```
+
+Genes mapping to "Unknown" T2D Loci: 
+
+```{r}
+
+unique(filter(df,type=="Unknown")$gene)[!(filter(df,type=="Unknown")$gene %in% unique(loci.df$nearby.gene))]
+
+```
+
+
+### GERA Replicated at $p \leq 0.05$ 
+
+```{r replicated, echo=FALSE}
+
+replic.df <- filter(df,replicated==TRUE)
+replic.df$diag.z.score <- as.numeric(replic.df$diag.z.score)
+replic.df$gera.z.score <- as.numeric(replic.df$gera.z.score)
+sign.consistent <- sign(replic.df$diag.z.score) == sign(replic.df$gera.z.score)
+replic.df <- cbind(replic.df,sign.consistent)
+```
+
+There are **`r dim(replic.df)[1]`** associations that replicate in the GERA-T2D study
+
+```{r}
+
+replic.df <- filter(replic.df,sign.consistent==TRUE)
+
+```
+
+There are **`r dim(replic.df)[1]`** associations that replicate in the GERA-T2D study in the same direction as DIAGRAM
+
+
+Corresponding to **`r length(unique(replic.df$gene))`** unique genes 
+
+```{r echo=FALSE}
+
+(replic.genes <- unique(replic.df$gene))
+
+```
+
+Of these replicated genes, **`r length(unique(replic.genes[replic.genes %in% rep.genes]))`** genes are reported T2D genes:  
+
+```{r echo=FALSE}
+
+unique(replic.genes[replic.genes %in% rep.genes])
+
+```
+
+
+Of these replicated genes, **`r length(unique(replic.genes[!(replic.genes %in% rep.genes)]))`** genes are **novel** genes:  
+
+```{r echo=FALSE}
+
+unique(replic.genes[!(replic.genes %in% rep.genes)])
+
+```
+
+
+### GSEA of MetaXcan-significant gene sets 
+
+```{r gsea, echo=FALSE}
+
+gsea.df <- readRDS(rds.dir%&%"gsea.p05.df.RDS")
+gsea.t2d.df <- readRDS(rds.dir%&%"gsea.p05.t2d.df.RDS")
+gsea.novel.df <- readRDS(rds.dir%&%"gsea.p05.novel.df.RDS")
+
+```
+
+There are **`r sum(gsea.df$bonfer)`** GO BP pathways that are Bonferonni-significant
+
+GSEA for all genes in set: 
+
+```{r}
+head(dplyr::select(gsea.df,one_of("over_represented_pvalue","term")))
+```
+
+GSEA for reported T2D genes in set: 
+
+```{r}
+head(dplyr::select(gsea.t2d.df,one_of("over_represented_pvalue","term")))
+```
+
+GSEA for novel genes in set: 
+
+```{r}
+head(dplyr::select(gsea.novel.df,one_of("over_represented_pvalue","term")))
+```
+
+
+# Analyses at Loci harboring T2D GWAS associations 
+
+```{r}
+
+df1 <- readRDS(rds.dir %&% "msig.loci.df.RDS")
+
+```
+
+### Genome-wide significant vs locus-wide significant 
+
+There are **`r dim(df1)[1]`** non-overlapping T2D loci, of which:
+
+**`r length(na.omit(df1$mtxn.sig.gw.genes))`** have genome-wide significant (across all models) MetaXcan associations 
+
+**`r length(na.omit(df1$mtxn.sig.lw.genes))`** have locus-wide significant (across all models) MetaXcan associations 
+
+
+### Locus profile 
+
+There are **`r dim(filter(df1,group==1))[1]`** loci where _at least one_ reported gene yielded a genome-wide signficant association
+
+There are **`r dim(filter(df1,group==2))[1]`** loci where _at least one_ reported gene yielded a locus-wide **but not genome-wide signficant** association 
+
+There are **`r dim(filter(df1,group==3))[1]`** loci where an unreported T2D gene yielded a genome-wide association but no reported gene yielded an association an any signifcance level
+
+There are **`r dim(filter(df1,group==4))[1]`** loci where an unreported T2D gene yielded a locus-wide association but no reported gene yielded an association an any signifcance level
+
+There are **`r dim(df1[is.na(df1$group),])[1]`** loci where there are **no significant associations** 
+
+## Genome-wide Signifcant genes and models 
 
 
 ```{r sig_gene, echo=FALSE}
@@ -212,81 +347,3 @@ tab <- sort(table(mvec),decreasing=TRUE)
 head(tab,10)
 
 ```
-
-
-
-# Genome-wide Signifant associations 
-
-```{r gw, echo=FALSE}
-
-df2 <- readRDS(rds.dir %&% "T2Dcore.df.RDS")
-df2 <- filter(df2, diag.mult.correct==TRUE)
-
-```
-
-
-There are **`r dim(df2)[1]`** GENOME-WIDE associations
-
-This corresponds to **`r length(unique(df2$gene))`** unique genes 
-
-Of these genes, **`r length(unique(df2$gene[df2$gene %in% rep.genes]))`** unique genes are reprted T2D genes and **`r length(unique(df2$gene[!(df2$gene %in% rep.genes)]))`** are **novel** genes 
-
-Reported genes: 
-
-```{r}
-
-unique(df2$gene[df2$gene %in% rep.genes])
-
-```
-
-Novel genes: 
-
-```{r}
-
-unique(df2$gene[!(df2$gene %in% rep.genes)])
-
-```
-
-Genes mapping to "Unknown" T2D Loci: 
-
-```{r}
-
-unique(filter(df2,type=="Unknown")$gene)
-
-```
-
-## Replicated in GERA at _p-value_ < 0.05
-
-```{r replicated, echo=FALSE}
-
-replic.df <- filter(df2,replicated==TRUE)
-
-```
-
-There are **`r dim(replic.df)[1]`** associations that replicate in the GERA-T2D study
-
-Corresponding to **`r unique(replic.df$gene)`** unique genes 
-
-```{r echo=FALSE}
-
-replic.genes <- unique(replic.df$gene)
-
-```
-
-Of these replicated genes, **`r length(unique(replic.genes[replic.genes %in% rep.genes]))`** genes are reported T2D genes:  
-
-```{r echo=FALSE}
-
-unique(replic.genes[replic.genes %in% rep.genes])
-
-```
-
-
-Of these replicated genes, **`r length(unique(replic.genes[!(replic.genes %in% rep.genes)]))`** genes are **novel** genes:  
-
-```{r echo=FALSE}
-
-unique(replic.genes[!(replic.genes %in% rep.genes)])
-
-```
-

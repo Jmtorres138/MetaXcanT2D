@@ -36,13 +36,13 @@ dir.create(tab.dir,showWarnings=FALSE)
 table.dir<-"/Volumes/im-lab/nas40t2/jason/projects/MetaXcan/results/tables/GTExV6p/"
 
 meta.name <- "DIAGRAM_ImpG_0.8_gtexV6p" 
-df1 <- readRDS(rds.dir %&% "elasticNet_Bonferonni.RDS")
-Alpha <- rep(0.5,dim(df1)[1]); df1 <- cbind(df1,Alpha)
-df2 <- readRDS(rds.dir %&% "elasticNet_FDR05.RDS")
-Alpha <- rep(0.5,dim(df2)[1]); df2 <- cbind(df2,Alpha)
-bonfer.df <- df1
-fdr05.df <- df2 
-remove(df1,df2)
+#df1 <- readRDS(rds.dir %&% "elasticNet_Bonferonni.RDS")
+#Alpha <- rep(0.5,dim(df1)[1]); df1 <- cbind(df1,Alpha)
+#df2 <- readRDS(rds.dir %&% "elasticNet_FDR05.RDS")
+#Alpha <- rep(0.5,dim(df2)[1]); df2 <- cbind(df2,Alpha)
+#bonfer.df <- df1
+#fdr05.df <- df2 
+#remove(df1,df2)
 ```
 
 ```{r load_hidden, echo=FALSE, results="hide", warning=FALSE}
@@ -151,22 +151,6 @@ server.dir <- "/Volumes/im-lab/nas40t2/jason/projects/ReferenceData/UCSC/"
 gencode.path <- server.dir %&%  "GENCODE.Genes.V19.Basic.annotated.txt.gz"
 gencode.ref.df <- fread("cat " %&% gencode.path %&% " | zmore")
 
-#make_ensid_ref <- function(){
-#  pre1 <- "/Volumes/im-lab/nas40t2/jason/projects/MetaXcan/db_files/gtex/alpha_"
-#  pre2 <- "/allResults/ensid_gene_key.txt.gz"
-#  f1 <- pre1 %&% 0.5 %&% pre2
-#  f2 <- pre1 %&% 1 %&% pre2
-#  arg1 <- "cat " %&% f1 %&% " | zmore"
-#  arg2 <- "cat " %&% f2 %&% " | zmore"
-#  df1 <- fread(arg1); df2 <- fread(arg2)
-#  df <- rbind(df1,df2) 
-#  df <- df[!duplicated(df), ]
-#  saveRDS(df,paste0(rds.dir,"ensid.genename.key.df.RDS"))
-#  print("saved RDS file")
-#}
-#make_ensid_ref()
-#ensid.genename.key.df <- readRDS(paste0(rds.dir,"ensid.genename.key.df.RDS"))
-
 gene2ensid <- function(mygene){
   #genename <- filter(ensid.genename.key.df,gene==mygene)$ensid
   genename <- filter(gencode.ref.df,hg19.wgEncodeGencodeAttrsV19.geneName==mygene)$hg19.wgEncodeGencodeAttrsV19.geneId[1]
@@ -177,19 +161,6 @@ gene2ensid <- function(mygene){
 Create Gene Annotation reference Build37 Genecode V18
 
 ```{r build37_ref, echo=FALSE}
-#make_gene_ref <- function(){
-#  dir <- "/Volumes/im-lab/nas40t2/hwheeler/cross-tissue/gtex-annot/"
-#  fname <- "gencode.v18.genes.patched_contigs.summary.protein"
-#  arg <- "cat " %&% dir %&% fname %&% " | zmore"
-#  df <- fread(arg)
-#  names(df) <- c("chrom","strand","txStart","txEnd","ensid","gene","type","status")
-#  df$chrom <- as.numeric(gsub("chr","",df$chrom))
-#  saveRDS(df,paste0(rds.dir,"gene.ref.df.RDS"))
-#  print("saved RDS file")
-#}
-#make_gene_ref()
-#gene.ref.df <- readRDS(paste0(rds.dir,"gene.ref.df.RDS"))
-
 
 make_ggd_ref <- function(){
   print("Gene Annotatino Table from Steve Turner")

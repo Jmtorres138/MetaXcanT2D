@@ -29,6 +29,8 @@ rds.dir <- "/Users/jtorres/Google Drive/Projects/MetaXcan/MetaXcanT2D/RDS.gtexV6
 
 # Functions for Getting Bonferroni and FDR 5%-significant Gene Sets 
 
+NOTE: These functions apply significant thresholds at the tissue model level! In other words they do not correct for the number of tests performed across all models in total
+
 ```{r sigfunct, echo=FALSE}
 
 get.bonfer.genes <- function(file.vec){

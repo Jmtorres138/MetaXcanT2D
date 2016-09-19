@@ -56,7 +56,7 @@ locus.subset <- function(locnum){
     filter(locus==locnum) %>%   select(-contains("length"), -contains("locus"),
                                                  -contains("tx"),-starts_with("win"))
   chrom <- df$chrom[1]; snp <- df$most.sig.snp[1]; repgene <- df$reported.gene[1]
-  df <- select(df,nearby.gene:Whole.Blood.DGN); names(df) <- gsub("TW_","",names(df))
+  df <- select(df,nearby.gene:TW_Whole_Blood_DGN); names(df) <- gsub("TW_","",names(df))
   names(df) <- gsub("TS_","",names(df)); names(df) <- gsub("Organ_","",names(df))
   return(df)
 }
@@ -442,26 +442,26 @@ save_locus_arrays()
 
 # group1
 filter(msig.loci.df,group==1)$locus
-#  8  9 18 21 28 30 32 41 42
-locus_6array_plot_upper(c(8,9,18,21,28,30),"GROUP1.part1",set.letter = "")
-locus_6array_plot_upper(c(32,41,42),"GROUP1.part2",set.letter = "")
+#  12 13 28 34 45 47 49 61 63
+locus_6array_plot_upper(c(12,13,28,34,45,47),"GROUP1.part1",set.letter = "")
+locus_6array_plot_upper(c(49,61,63),"GROUP1.part2",set.letter = "")
 
 # group 2
 filter(msig.loci.df,group==2)$locus
-# 1  3  6 13 31 33 35 40
-locus_6array_plot_upper(c(1,3,6,13,31,33),"GROUP2.part1",set.letter = "")
-locus_6array_plot_upper(c(35,40),"GROUP2.part2",set.letter = "")
+# 3  5  8 18 19 22 25 27 48 50 52 54 58 60 62
+locus_6array_plot_upper(c(3,5,8,18,19,22),"GROUP2.part1",set.letter = "")
+locus_6array_plot_upper(c(25,27,48,50,52,54),"GROUP2.part2",set.letter = "")
+locus_6array_plot_upper(c(58,60,62),"GROUP2.part3",set.letter = "")
 
 # group 3
 filter(msig.loci.df,group==3)$locus
-# 15 24 26
-locus_6array_plot_upper(c(15,24,26),"GROUP3.part1",set.letter = "")
+# 21 38 41
+locus_6array_plot_upper(c(21,38,41),"GROUP3.part1",set.letter = "")
 
 # group 4
 filter(msig.loci.df,group==4)$locus
-# 16 17 20 22 27 34 38 46
-locus_6array_plot_upper(c(16,17,20,22,27,34),"GROUP4.part1",set.letter = "")
-locus_6array_plot_upper(c(38,46),"GROUP4.part2",set.letter = "")
+# 33 35 42 43 51 57
+locus_6array_plot_upper(c(33,35,42,43,51,57),"GROUP4.part1",set.letter = "")
 
 
 ```

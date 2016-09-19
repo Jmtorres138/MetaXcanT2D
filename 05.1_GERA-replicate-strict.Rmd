@@ -232,7 +232,7 @@ get_msig_df <- function(){
   return(df) 
 }
 
-# This function will iterate through each of the 57 locus regions, extract the diagram p.value for each LW-association and then use the full set of locus genes, dplyr, and the p data frame in gera to determine if the association replicates at LW significance 
+# This function will iterate through each of the 68? locus regions, extract the diagram p.value for each LW-association and then use the full set of locus genes, dplyr, and the p data frame in gera to determine if the association replicates at LW significance 
 
 make_gera_lw_rep_df <- function(){
   df <- get_msig_df()
@@ -273,8 +273,14 @@ make_gera_lw_rep_df <- function(){
                                               Gene %in% loc.genes)[,2:dim(gera.p.df)[2]])))
         num.tests <- length(p.vec)
         lt <- 0.05/num.tests
-        # get locus-level q-value in GERA 
-        q.vec <- qvalue(p.vec)$qvalues
+        # get locus-level q-value in GERA
+        lambrange <- (c(min(p.vec),max(p.vec)))
+        if (max(lambrange) < 0.95){
+          print("Adjusting Lambda range")
+          q.vec <- qvalue(p.vec,lambda=seq(0.05,max(lambrange),by=0.05))$qvalues  
+        } else{
+          q.vec <- qvalue(p.vec)$qvalues          
+        }
         gq <- q.vec[match(gp,p.vec)]
         # look up strict (across all tests) GERA q value 
         gqs <- filter(all.df,gene==g,model==m)$q.value.y[1]
@@ -314,7 +320,6 @@ make_gera_lw_rep_df <- function(){
                   gw.fdr05, gw.fdr10, gw.fdr20, gw.p05, same.direct)
   
 }
-
 
 rep.df <- make_gera_lw_rep_df()
 saveRDS(rep.df,file=rds.dir%&%"lw.rep.df.RDS")

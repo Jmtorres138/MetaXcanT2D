@@ -44,68 +44,50 @@ Modify and save loci.df
 
 ```{r loci_df,  echo=FALSE}
 
-#subdf <- function(df,meta.name,type="TW") { 
-#  df <- tbl_df(df) %>% select(chrom:nearby.txend,contains(meta.name))
-#  tw.df <- df %>% select(chrom:nearby.txend,contains("TW_"),contains("DGN"),contains("CrossTissue"))
-#  org.df <- df %>% select(chrom:nearby.txend,contains("Organ_"),contains("CrossTissue"))
-#  ts.df <- df %>% select(chrom:nearby.txend,contains("TS_"),contains("CrossTissue"))
-#  names(tw.df) <- gsub(meta.name %&% "_","",names(tw.df))
-#  names(org.df) <- gsub(meta.name %&% "_","",names(org.df))
-#  names(ts.df) <- gsub(meta.name %&% "_","",names(ts.df))
-#  if (type=="TW"){
-#    return(tw.df)
-#  } else if (type=="Organ"){
-#    return(org.df)
-#  } else if (type=="TS"){
-#    return(ts.df)
-#  } else{
-#    stop("Need a valid type: TW, Organ, or TS")
+
+#harmonize_loci_df <- function(){
+#  loci.df <- readRDS(rds.dir%&%"diag3/t2d.loci.z.df.RDS")
+  #loci.df <- subdf(loci.df,"DIAGRAM3","TW")
+#  names(z.df) <- gsub("TW_","",names(z.df))
+#  names(z.df) <- gsub("_",".",names(z.df))
+#  names(loci.df) <- gsub("TW_","",names(loci.df))
+#  names(loci.df) <- gsub("_",".",names(loci.df))  
+#  loci.mod.vec <- names(loci.df)[14:length(names(loci.df))]
+  # Iterate over rows in loci.df
+#  for (i in 1:dim(loci.df)[1]){
+#    reported.gene <- as.character(loci.df[i,8])
+#    gene <- as.character(loci.df[i,11])
+#    #print(c(reported.gene,gene))
+    # Iterate over tissue model columns; first model starts at column 14 (TW_Adipose_Subcutaneous)
+#    for (j in 14:length(names(loci.df))){
+#      model <- loci.mod.vec[j-13] # 13 is a correction value to ensure that model referencing 
+      # in loci.mod.vec begins at 1
+#      locidf.val <- as.numeric(loci.df[i,j])
+#      zdf.val <- as.numeric(as.matrix(filter(z.df,Gene==gene) %>% select(one_of(model))))
+#      if (is.empty(zdf.val)){
+#        zdf.val <- NA
+#      }
+      #print(c(locidf.val,zdf.val)) # Checking 
+#      if (!is.na(locidf.val) & is.na(zdf.val)){
+#        loci.df[i,j] <- zdf.val
+#      }
+#    }
 #  }
+#  savename <- "/Users/jtorres/Google Drive/Projects/MetaXcan/" %&% 
+#                "MetaXcanT2D/RDS.gtexV6p/loci.df.RDS"
+#  print("Saving RDS file")
+#  saveRDS(loci.df,file=savename)
+#  return(loci.df)
 #}
 
+#harmonize_loci_df()
 
-harmonize_loci_df <- function(){
-  loci.df <- readRDS(rds.dir%&%"diag3/t2d.loci.z.df.RDS")
-  #loci.df <- subdf(loci.df,"DIAGRAM3","TW")
-  names(z.df) <- gsub("TW_","",names(z.df))
-  names(z.df) <- gsub("_",".",names(z.df))
-  names(loci.df) <- gsub("TW_","",names(loci.df))
-  names(loci.df) <- gsub("_",".",names(loci.df))  
-  loci.mod.vec <- names(loci.df)[14:length(names(loci.df))]
-  # Iterate over rows in loci.df
-  for (i in 1:dim(loci.df)[1]){
-    reported.gene <- as.character(loci.df[i,8])
-    gene <- as.character(loci.df[i,11])
-    #print(c(reported.gene,gene))
-    # Iterate over tissue model columns; first model starts at column 14 (TW_Adipose_Subcutaneous)
-    for (j in 14:length(names(loci.df))){
-      model <- loci.mod.vec[j-13] # 13 is a correction value to ensure that model referencing 
-      # in loci.mod.vec begins at 1
-      locidf.val <- as.numeric(loci.df[i,j])
-      zdf.val <- as.numeric(as.matrix(filter(z.df,Gene==gene) %>% select(one_of(model))))
-      if (is.empty(zdf.val)){
-        zdf.val <- NA
-      }
-      #print(c(locidf.val,zdf.val)) # Checking 
-      if (!is.na(locidf.val) & is.na(zdf.val)){
-        loci.df[i,j] <- zdf.val
-      }
-    }
-  }
-  savename <- "/Users/jtorres/Google Drive/Projects/MetaXcan/" %&% 
-                "MetaXcanT2D/RDS.gtexV6p/loci.df.RDS"
-  print("Saving RDS file")
-  saveRDS(loci.df,file=savename)
-  return(loci.df)
-}
-
-harmonize_loci_df()
-
-loci.df <- readRDS("/Users/jtorres/Google Drive/Projects/MetaXcan/" %&% 
+loci.df <- readRDS(rds.dir%&%"diag3/t2d.loci.z.df.RDS")
+loci.df <- saveRDS(loci.df,"/Users/jtorres/Google Drive/Projects/MetaXcan/" %&% 
                 "MetaXcanT2D/RDS.gtexV6p/loci.df.RDS")
+loci.df <- readRDS(rds.dir%&%"diag3/t2d.loci.z.df.RDS")
 
 ```
-
 
 
 # Functions 
@@ -160,7 +142,7 @@ locus.subset <- function(genename){
     filter(reported.gene==genename) %>%   select(-contains("length"),
                                                  -contains("tx"),-starts_with("win"))
   chrom <- df$chrom[1]; snp <- df$most.sig.snp[1]; repgene <- df$reported.gene[1]
-  df <- select(df,nearby.gene:Whole.Blood.DGN); names(df) <- gsub("TW_","",names(df))
+  df <- select(df,nearby.gene:TW_Whole_Blood_DGN); names(df) <- gsub("TW_","",names(df))
   names(df) <- gsub("TS_","",names(df)); names(df) <- gsub("Organ_","",names(df))
   names(df) <- gsub("_",".",names(df)); names(df) <- gsub("-",".",names(df))
   return(df)
@@ -337,11 +319,11 @@ profile <- function(multsig=FALSE){
 
 profile_v2 <- function(sigthresh){
   if (sigthresh=="multi"){
-    df <- filter(loci.sig.df,Model.Wide.Significant==TRUE)
+    df <- dplyr::filter(loci.sig.df,Model.Wide.Significant==TRUE)
   } else if (sigthresh=="genome") {
-    df <- filter(loci.sig.df,Genome.Wide.Significant==TRUE)
+    df <- dplyr::filter(loci.sig.df,Genome.Wide.Significant==TRUE)
   } else if (sigthresh=="locus"){
-    df <- filter(loci.sig.df,Locus.Significant==TRUE)
+    df <- dplyr::filter(loci.sig.df,Locus.Significant==TRUE)
   } else {
     stop("Need to enter valid significant threshold: multi, genome, locus")
   }
@@ -351,7 +333,7 @@ profile_v2 <- function(sigthresh){
   Genes <- c()
   ReportedGene.Sig <- c()
   for (loc in loci.vec){
-    temp.df <- filter(df,Locus==loc)
+    temp.df <- dplyr::filter(df,Locus==loc)
     g.vec <- unique(temp.df$Nearby.Gene)
     count <- length(g.vec)
     gstring <- paste0(g.vec,collapse=",")
@@ -374,7 +356,6 @@ profile_v2 <- function(sigthresh){
 # Analyze Results
 
 ```{r analyze_results, echo=FALSE}
-
 
 print_report_nomultsig <- function(){
   result.sig.df <- profile_v2(sigthresh="genome")
