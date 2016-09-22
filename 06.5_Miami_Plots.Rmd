@@ -176,10 +176,9 @@ miami <- function(mygene,model){
   txint <- get_txint(mygene)
   txstart <- txint[[1]]
   txend <- txint[[2]]
-  ## GWAS 
+  ## GWAS data frame 
   gwas.df <- filter(diagram.df,CHR==chrom,POS>=start,POS<=end)
-  #gwas.pred.df <- filter(gwas.df,SNP %in% mod.df$rsid)
-  gwas.pred.df <- filter(diagram.df,SNP %in% mod.df$rsid)
+  gwas.pred.df <- filter(diagram.df,SNP %in% mod.df$rsid)#gwas.pred.df <- filter(gwas.df,SNP %in% mod.df$rsid)
   t <- gsub("_","-",model)
   titl <- substitute(paste(t, " : ", italic(g)),list(t=t,g=mygene))
   max.y = round(max(-log(2*pnorm(-abs(gwas.df$Z),lower.tail=TRUE),base=10)),-1)
@@ -188,6 +187,30 @@ miami <- function(mygene,model){
   } else{
     br <- seq(0,max.y,10)
   }
+  ## eQTL 
+  gtex.path <- tarbell.dir %&% "TW_" %&% model %&% "_" %&% mygene %&% ".gtex.txt.gz"
+  gtex.df <- fread("cat " %&% gtex.path %&% " | zmore")
+  names(gtex.df) <- c("rsid","pos","chrom","model","ensid","gtex.id",
+                      "tss.distance","gtex.p","slope","slope.se")
+  gtex.pred.df <- filter(gtex.df,rsid %in% mod.df$rsid)
+  names(gtex.pred.df)[1] <- "SNP"
+  gtex.pred.df <- inner_join(gwas.pred.df,gtex.pred.df,by="SNP")
+  gtex.pred.df <- process_pred_df(gtex.pred.df)
+  max.y.eqtl <- round(max(-log(gtex.pred.df$gtex.p,base=10)),-1)
+  if (max.y.eqtl==0){
+    max.y.eqtl=10 
+  }  
+  # In case GWAS is missing chrom or pos info but available in GTEx file 
+  for (i in 1:length(gwas.pred.df$SNP)){
+    s <- gwas.pred.df$SNP[i]
+    if (is.na(gwas.pred.df$CHR)[i]){
+      gwas.pred.df$CHR[i] <- filter(gtex.pred.df,SNP==s)$chrom
+    }
+    if (is.na(gwas.pred.df$POS)[i]){
+      gwas.pred.df$POS[i] <- filter(gtex.pred.df,SNP==s)$pos
+    }    
+  }
+  ## MIAMI PLOT A (GWAS)
   gwas.plt <- ggplot(data=gwas.df,aes(x=POS/10^6,
                                       y=-log(2*pnorm(-abs(Z),lower.tail=TRUE),
                                              base=10))) + 
@@ -215,19 +238,7 @@ miami <- function(mygene,model){
           legend.key.size = unit(0.4, "cm"),
           legend.text = element_text(size = 6),
           panel.grid.minor=element_blank());gwas.plt
-  ## eQTL 
-  gtex.path <- tarbell.dir %&% "TW_" %&% model %&% "_" %&% mygene %&% ".gtex.txt.gz"
-  gtex.df <- fread("cat " %&% gtex.path %&% " | zmore")
-  names(gtex.df) <- c("rsid","pos","chrom","model","ensid","gtex.id",
-                      "tss.distance","gtex.p","slope","slope.se")
-  gtex.pred.df <- filter(gtex.df,rsid %in% mod.df$rsid)
-  names(gtex.pred.df)[1] <- "SNP"
-  gtex.pred.df <- inner_join(gwas.pred.df,gtex.pred.df,by="SNP")
-  gtex.pred.df <- process_pred_df(gtex.pred.df)
-  max.y.eqtl <- round(max(-log(gtex.pred.df$gtex.p,base=10)),-1)
-  if (max.y.eqtl==0){
-    max.y.eqtl=10 
-  }
+  ## MIAMI Plot B (GTEx)
   gtex.plt <- ggplot(data=gtex.df,aes(x=pos/10^6,y=-log(gtex.p,base=10))) + 
     geom_point(size=2.5,alpha=0.7,shape=21,color="darkgray",fill="grey") + 
     theme_bw() + coord_cartesian(xlim=c(start/10^6,end/10^6),
