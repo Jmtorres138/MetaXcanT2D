@@ -1,0 +1,193 @@
+---
+title: "Profile Predictor SNPS"
+author: "Jason Torres"
+date: "September 18, 2016"
+output:
+  pdf_document:
+    toc: yes
+  html_document:
+    fig_caption: yes
+    highlight: textmate
+    number_sections: yes
+    theme: journal
+    toc: yes
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+Setup and load file with locus-wide significant associations (196 total)
+
+```{r setup, echo=FALSE}
+
+"%&%" <- function(a,b) paste0(a,b)
+
+library("data.table")
+library("dplyr")
+
+tarbell.dir <- "/Volumes/im-lab/nas40t2/jason/projects/MetaXcan/results/predictors/gtexV6p/"
+file.dir <- "/Users/jtorres/Google Drive/Projects/MetaXcan/MetaXcanT2D/"
+rds.dir <- file.dir %&% "RDS.gtexV6p/"
+lw.df <- readRDS(file=rds.dir%&%"lw.rep.df.RDS") 
+
+```
+
+Load GWAS results 
+
+```{r load_gwas, echo=FALSE} 
+
+gwas.path <- "/Volumes/im-lab/nas40t2/jason/projects/MetaXcan/meta_files/ImpGformat/merged_output_files/" 
+diagram.df <- fread("cat "%&%gwas.path%&%"impG_DIAGRAM/gwas_file_v6p/diag3.z.impG_0.8.gtexV6p.txt.gz"%&%" | zmore")
+gera.df <- fread("cat "%&%gwas.path%&%"impG_GERA/gwas_file_v6p/gera.z.impG_0.8.gtexV6p.txt.gz"%&%" | zmore") 
+ 
+```
+
+
+Function to lookup ENSID from Gene Symbol 
+
+```{r ensid_ref, echo=FALSE}
+
+server.dir <- "/Volumes/im-lab/nas40t2/jason/projects/ReferenceData/UCSC/"
+gencode.path <- server.dir %&%  "GENCODE.Genes.V19.Basic.annotated.txt.gz"
+gencode.ref.df <- fread("cat " %&% gencode.path %&% " | zmore")
+
+gene2ensid <- function(mygene){
+  #genename <- filter(ensid.genename.key.df,gene==mygene)$ensid
+  genename <- filter(gencode.ref.df,hg19.wgEncodeGencodeAttrsV19.geneName==mygene)$hg19.wgEncodeGencodeAttrsV19.geneId[1]
+  return(genename)
+}
+```
+
+
+Generate data frame of MetaXcan Predictor SNPs 
+
+```{r}
+
+beta.file <- db.dir %&% "allBetas/Liver.allBetas.txt.gz"
+
+read_betas_df <- function(my.model){
+  dir <- "/Volumes/im-lab/nas40t2/jason/projects/MetaXcan/db_files/gtex_v6p/alpha_0.5/allBetas/"  
+  fname <- "cat " %&% dir %&% my.model %&% ".allBetas.txt.gz" %&% " | zmore"
+  df <- fread(fname)
+  return(df)
+}
+
+get_model_snps <- function(my.gene, beta.df){
+  ensid <- gene2ensid(my.gene)
+  df <- filter(beta.df, grepl(ensid,gene))
+  return(df)
+}
+
+model_snps_df <- function(my.gene, my.model, beta.df){
+  temp.df <- get_model_snps(my.gene, beta.df)
+  names(temp.df) <- c("ensid","rsid","mtxn.ref",
+                      "mtxn.alt","mtxn.beta","alpha")
+  gene <- rep(my.gene,dim(temp.df)[1])
+  model <- rep(my.model,dim(temp.df)[1])
+  out.df <- cbind(gene,model,temp.df)
+  out.df$gene <- as.character(out.df$gene)
+  out.df$model <- as.character(out.df$model)
+  return(out.df)
+}
+
+model_snps_wbDGN_df <- function(my.gene, my.model, beta.df){
+  temp.df <- get_model_snps(my.gene, beta.df)
+  names(temp.df) <- c("rsid","ensid","mtxn.beta","mtxn.ref",
+                      "mtxn.alt")
+  #ensid <- c()
+  #for (g in temp.df$gene){
+  #  e <- gene2ensid(g)
+  #  ensid <- append(ensid,e)
+  #}
+  alpha <- rep("0.5",dim(temp.df)[1])
+  temp.df <- cbind(temp.df,alpha)
+  temp.df <- dplyr::select(temp.df,one_of("ensid","rsid","mtxn.ref",
+                      "mtxn.alt","mtxn.beta","alpha"))
+  gene <- rep(my.gene,dim(temp.df)[1])
+  model <- rep(my.model,dim(temp.df)[1])
+  out.df <- cbind(gene,model,temp.df)
+  out.df$gene <- as.character(out.df$gene)
+  out.df$model <- as.character(out.df$model)
+  out.df$alpha<- as.integer(out.df$alpha)
+  return(out.df)
+}
+
+append_gwas_info <- function(model.snps.df){
+  extract.df <- filter(diagram.df,SNP %in% model.snps.df$rsid) %>% 
+    dplyr::select(one_of("SNP","A1","A2","Z","r2pred"))
+  names(extract.df) <- c("rsid","diag.a1",
+                         "diag.a2","diag.z","diag.r2pred")
+  temp.df <- full_join(model.snps.df,extract.df,by="rsid")
+  extract.df <- filter(gera.df,SNP %in% model.snps.df$rsid) 
+  names(extract.df) <- c("rsid","gera.a1",
+                         "gera.a2","gera.z","gera.r2pred")
+  out.df <- full_join(temp.df,extract.df,by="rsid")
+  diag.p <- 2*pnorm(-abs(out.df$diag.z),lower.tail=TRUE)
+  gera.p <- 2*pnorm(-abs(out.df$gera.z),lower.tail=TRUE)
+  out.df <- cbind(out.df,diag.p,gera.p)
+  return(out.df)
+}
+
+test <- read_betas_df("Whole_Blood_DGN")
+test2 <- model_snps_wbDGN_df("PCBD2","Whole_Blood_DGN",test)
+test3 <- append_gwas_info(test2)
+
+make_model_df <- function(){
+  mod.vec <- sort(unique(gsub("TW_","",lw.df$model)))
+  out.df <- c()
+  for (m in mod.vec){
+    print("Model: " %&% m)
+    beta.df <- read_betas_df(m)
+    temp.df <- filter(lw.df,model=="TW_"%&%m)
+    g.vec <- temp.df$gene
+    for (g in g.vec){
+      print(g)
+      if (m == "Whole_Blood_DGN"){
+        mod.df <- model_snps_wbDGN_df(g,m,beta.df)  
+      } else{
+        mod.df <- model_snps_df(g,m,beta.df)
+      }
+      mod.df <- append_gwas_info(mod.df)
+      out.df <- rbind(out.df,mod.df)
+    }
+  }
+  return(out.df)
+}
+
+modsnp.df <- make_model_df()
+
+saveRDS(modsnp.df,file=rds.dir %&% "mtxnsig-gene-pred.df.RDS")
+write.table(modsnp.df,file=tarbell.dir %&% "mtxnsig-gene-pred.txt",quote=FALSE,sep="\t",row.names=FALSE)
+modsnp.df <- readRDS(rds.dir %&% "mtxnsig-gene-pred.df.RDS")
+
+#mod.vec <- sort(unique(res.df$model))
+#write.table(mod.vec,file=tarbell.dir %&% "model-key.txt",quote=FALSE,sep="\t",row.names=FALSE)
+
+```
+
+
+Make model key file 
+
+```{r model_key, echo=FALSE}
+
+dir1 <- "/Volumes/im-lab/nas40t2/jason/projects/MetaXcan/db_files/gtex_v6p/alpha_0.5/allBetas/" 
+dir2 <- "/Volumes/im-lab/nas40t2/Data/dbGaP/GTEx/V6p-gtexportal/GTEx_Analysis_v6p_all-associations"
+
+fvec1 <- list.files(dir1)[grepl(".gz",list.files(dir1))]
+fvec1 <- sort(gsub(".allBetas.txt.gz","",fvec1))
+fvec1 <- fvec1[!grepl("Whole_Blood_DGN",fvec1)]
+fvec2 <- sort(gsub("_Analysis.v6p.all_snpgene_pairs.txt.gz","",list.files(dir2)))
+
+if (all(fvec1==fvec2)){
+  df <- as.data.frame(cbind(fvec1,fvec2))
+  fvec1 <- paste0("TW_",fvec1)
+  df$fvec1 <- as.character(df$fvec1)
+  df$fvec2 <- as.character(df$fvec2)
+  write.table(df,file=tarbell.dir%&%"model-key.txt",sep="\t",quote=FALSE,row.names=FALSE,col.names=FALSE)
+} else{
+  print("You need to manually create model key")
+}
+
+```
+

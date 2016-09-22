@@ -78,9 +78,9 @@ append_gera_p_and_gw <- function(df){
   for (i in 1:dim(df)[1]){
     gene <- df[i,1]
     mod <- df[i,2]
-    p.df <- filter(p.EN.df,Gene==gene) %>% select(one_of(mod))
+    p.df <- filter(p.EN.df,Gene==gene) %>% dplyr::select(one_of(mod))
     pval <- as.numeric(as.matrix(p.df))
-    q.df <- filter(q.EN.df,Gene==gene) %>% select(one_of(mod))
+    q.df <- filter(q.EN.df,Gene==gene) %>% dplyr::select(one_of(mod))
     qval <- as.numeric(as.matrix(q.df))
     if (!is.na(pval) & pval <= gw.thresh){
       rep <- TRUE 
@@ -149,7 +149,7 @@ reformat_df_add_q <- function(dataset.name){
   for (e in 1:length(mod.vec)){
     print(mod.vec[e])
     for (i in 1:length(gene.vec)){
-      #p <- as.numeric(filter(p.df,Gene==g) %>% select(one_of(m)))
+      #p <- as.numeric(filter(p.df,Gene==g) %>% dplyr::select(one_of(m)))
       p <- p.mat[i,e]
       if (!is.na(p)){
         g <- gene.vec[i]
@@ -232,7 +232,7 @@ get_msig_df <- function(){
   return(df) 
 }
 
-# This function will iterate through each of the 68? locus regions, extract the diagram p.value for each LW-association and then use the full set of locus genes, dplyr, and the p data frame in gera to determine if the association replicates at LW significance 
+# This function will iterate through each of the 68 locus regions, extract the diagram p.value for each LW-association and then use the full set of locus genes, dplyr, and the p data frame in gera to determine if the association replicates at LW significance 
 
 make_gera_lw_rep_df <- function(){
   df <- get_msig_df()
@@ -265,10 +265,10 @@ make_gera_lw_rep_df <- function(){
       for (e in 1:length(lw.genes)){
         g <- lw.genes[e]
         m <- lw.mods[e]
-        dz <- as.numeric(filter(diag.z.df,Gene==g) %>% select(one_of(m)))
-        dp <- as.numeric(filter(diag.p.df,Gene==g) %>% select(one_of(m)))
-        gz <- as.numeric(filter(gera.z.df,Gene==g) %>% select(one_of(m)))
-        gp <- as.numeric(filter(gera.p.df,Gene==g) %>% select(one_of(m)))
+        dz <- as.numeric(filter(diag.z.df,Gene==g) %>% dplyr::select(one_of(m)))
+        dp <- as.numeric(filter(diag.p.df,Gene==g) %>% dplyr::select(one_of(m)))
+        gz <- as.numeric(filter(gera.z.df,Gene==g) %>% dplyr::select(one_of(m)))
+        gp <- as.numeric(filter(gera.p.df,Gene==g) %>% dplyr::select(one_of(m)))
         p.vec <- na.omit(as.numeric(as.matrix(filter(gera.p.df,
                                               Gene %in% loc.genes)[,2:dim(gera.p.df)[2]])))
         num.tests <- length(p.vec)

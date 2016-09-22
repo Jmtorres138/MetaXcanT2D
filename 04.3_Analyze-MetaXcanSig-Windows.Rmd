@@ -261,7 +261,7 @@ all_genemods <- function(){
 }
 
 genemods.df <- all_genemods()
-write.table(genemods.df,file="/Volumes/im-lab/nas40t2/jason/projects/MetaXcan/results/predictors/by_locus/gtexV6p/genemods.txt",sep="\t",quote = FALSE,row.names=FALSE)
+write.table(genemods.df,file="/Volumes/im-lab/nas40t2/jason/projects/MetaXcan/results/predictors/gtexV6p/genemods.txt",sep="\t",quote = FALSE,row.names=FALSE)
 
 
 

@@ -347,3 +347,39 @@ tab <- sort(table(mvec),decreasing=TRUE)
 head(tab,10)
 
 ```
+
+
+### GERA replication of Locus-wide significant associations at $p \leq 0.05$ 
+
+```{r}
+#**`r `**
+lw.df <- readRDS(file=rds.dir%&%"lw.rep.df.RDS") 
+
+```
+
+
+There are **`r dim(lw.df)[1]`** locus-wide significant associations in DIAGRAM 
+
+Of these, **`r dim(filter(lw.df,gw.p05==TRUE))[1]`** replicate in GERA-T2D Study 
+
+Of these, **`r dim(filter(lw.df,gw.p05==TRUE,same.direct==TRUE))[1]`** replicate in GERA-T2D Study in the **same direction**
+
+```{r}
+
+lw.df <- arrange(lw.df,desc(abs(diag.z)))
+
+print.df <- filter(lw.df,gw.p05==TRUE,same.direct==TRUE) %>% dplyr::select(one_of("gene","model","diag.z","gera.z"))
+
+print.genes <- unique(print.df$gene)
+
+```
+
+
+This corresponds to **`r length(print.genes)`** unique genes 
+
+```{r}
+
+print.genes
+
+```
+

@@ -1,0 +1,326 @@
+---
+title: "Miami plots"
+author: "Jason Torres"
+date: "September 18, 2016"
+output:
+  pdf_document:
+    toc: yes
+  html_document:
+    fig_caption: yes
+    highlight: textmate
+    number_sections: yes
+    theme: journal
+    toc: yes
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+GTEx Version 6p, HapMap2 SNPs 
+
+
+```{r setup_libraries}
+
+"%&%" <- function(a,b) paste0(a,b)
+
+library("data.table")
+library("dplyr")
+library("ggplot2")
+library("ggrepel")
+library("gridExtra")
+
+root.dir <- "/Users/jtorres/Google Drive/Projects/MetaXcan/MetaXcanT2D/"
+rds.dir <- root.dir %&% "RDS.gtexV6p/"
+tarbell.dir <- "/Volumes/im-lab/nas40t2/jason/projects/MetaXcan/results/predictors/gtexV6p/gtex_files/"
+
+ggd.df <- readRDS(rds.dir%&%"ggd.ref.df.RDS")
+
+save.dir <- "/Users/jtorres/Google Drive/Projects/MetaXcan/MetaXcanT2D/figures.gtexV6p/miamiPlots/"
+
+```
+
+
+
+```{r prepare_gwas}
+
+diag.path <- "/Volumes/im-lab/nas40t2/jason/projects/MetaXcan/meta_files/" %&% "ImpGformat/merged_output_files/impG_DIAGRAM/gwas_file_v6p/" %&% "diag3.z.impG_0.8.gtexV6p.txt.gz"
+diag.df <- fread("cat " %&% diag.path %&% " | zmore")
+
+#library(BiocInstaller)
+#biocLite("SNPlocs.Hsapiens.dbSNP144.GRCh37")
+library("SNPlocs.Hsapiens.dbSNP144.GRCh37")
+snps144 = SNPlocs.Hsapiens.dbSNP144.GRCh37
+snps.Gpos = snpsById(snps144,ids=diag.df$SNP,ifnotfound="drop") 
+rs.vec <- mcols(snps.Gpos)$RefSNP_id # rs ids 
+chrom.vec <- as.character(seqnames(snps.Gpos)) # chromosomes 
+pos.vec <- start(ranges(snps.Gpos)) # positions 
+snp.df <- as.data.frame(cbind(chrom.vec,rs.vec,pos.vec),stringsAsFactors=FALSE)
+names(snp.df) <- c("CHR","SNP","POS")
+snp.df$CHR <- gsub("ch","",snp.df$CHR)
+snp.df$CHR <- as.integer(snp.df$CHR)
+snp.df$POS <- as.integer(snp.df$POS)
+
+diagram.df <- full_join(diag.df,snp.df,by="SNP")
+diagram.df$POS <- as.integer(diagram.df$POS)
+diagram.df$CHR <- gsub("ch","",diagram.df$CHR)
+diagram.df$CHR <- as.integer(diagram.df$CHR)
+
+
+```
+
+
+```{r get_sig_assoc}
+
+sig.df <- filter(readRDS(rds.dir%&%"T2Dcore.df.RDS"),
+             diag.mult.correct==TRUE,model!="WholeBloodDGN",
+             model!="CrossTissue")
+sig.df$diag.p.value <- as.numeric(sig.df$diag.p.value)
+sig.df <- arrange(sig.df,diag.p.value)
+
+str(sig.df)
+lw.df <- readRDS(rds.dir%&%"lw.rep.df.RDS")
+
+```
+
+```{r windows}
+
+get_chrom <- function(genename){
+  temp.df <- filter(ggd.df,symbol==genename)
+  temp.df <- filter(temp.df,chr %in% (1:23))[1,]
+  chrom <- temp.df$chr
+  return(chrom)
+}
+
+get_window <- function(genename){
+  temp.df <- filter(ggd.df,symbol==genename)
+  temp.df <- filter(temp.df,chr %in% (1:23))[1,]
+  start <- temp.df$start - 10^6
+  end <- temp.df$end + 10^6
+  return(list(start,end))
+}
+get_txint <- function(genename){
+  temp.df <- filter(ggd.df,symbol==genename)
+  temp.df <- filter(temp.df,chr %in% (1:23))[1,]
+  start <- temp.df$start
+  end <- temp.df$end
+  return(list(start,end))
+}
+
+```
+
+
+
+```{r main_function}
+
+beta.dir <- "/Volumes/im-lab/nas40t2/jason/projects/MetaXcan/db_files/gtex_v6p/alpha_0.5/allBetas/"
+res.dir <- "/Volumes/im-lab/nas40t2/jason/projects/MetaXcan/results/DIAGRAM_ImpG_0.8_gtexV6p/alpha_0.5/" #TW_Whole_Blood.zscores.csv
+
+
+get_model_snps <- function(mygene,model){
+  print("Looking up model SNPs: " %&% model %&% " ; " %&% mygene)
+  file.path <- beta.dir %&% model %&% ".allBetas.txt.gz"
+  temp.df <- fread("cat " %&% file.path %&% " | zmore")
+  ensid <- filter(ggd.df,symbol==mygene)$ensgene
+  out.df <- filter(temp.df,grepl(ensid, temp.df$gene))
+  if (dim(out.df)[1]==0 | length(ensid) > 1){
+    t.df <- fread("cat " %&% res.dir  %&% "TW_" %&% model %&% ".zscores.csv")
+    ensid <- filter(t.df,gene_name==mygene)$gene
+    out.df <- filter(temp.df,grepl(ensid, temp.df$gene))
+  }
+  return(out.df)
+}
+
+process_pred_df <- function(pred.df){
+  gtex.A1 <- c()
+  gtex.A2 <- c()
+  for (id in pred.df$gtex.id){
+    vec <- strsplit(id,split="_")[[1]]
+    gtex.A1<- append(gtex.A1,vec[3])
+    gtex.A2<- append(gtex.A2,vec[4])
+  }
+  effect.allele <- pred.df$A2
+  eval.vec <- effect.allele == gtex.A2
+  adj.slope <- pred.df$slope
+  for (e in 1:length(eval.vec)){
+    if (e ==FALSE){
+      adj.slope[e] <- (-1)*adj.slope[e]
+    }
+  }
+  adj.slope
+  mycol <- c()
+  for (col in adj.slope){
+    if (col < 0){
+      mycol <- append(mycol,"dodgerblue2")
+    } else{
+      mycol <- append(mycol,"green1")
+    }
+  }
+  out.df <- cbind(pred.df,adj.slope,mycol)
+  return(out.df)
+}
+
+
+miami <- function(mygene,model){
+  mod.df <- get_model_snps(mygene,model)
+  if (dim(mod.df)[1] == 0){ # Bug fix 
+    opt <- options(show.error.messages=FALSE) 
+    on.exit(options(opt)) 
+    stop("Problem looking up: " %&% mygene %&% ", " %&% model) 
+  }
+  chrom <- as.integer(get_chrom(mygene))
+  chrom <- as.integer(na.omit(chrom))[1] # Bug fix 
+  window <- get_window(mygene)
+  start <- window[[1]]
+  end <- window[[2]]
+  txint <- get_txint(mygene)
+  txstart <- txint[[1]]
+  txend <- txint[[2]]
+  ## GWAS 
+  gwas.df <- filter(diagram.df,CHR==chrom,POS>=start,POS<=end)
+  #gwas.pred.df <- filter(gwas.df,SNP %in% mod.df$rsid)
+  gwas.pred.df <- filter(diagram.df,SNP %in% mod.df$rsid)
+  t <- gsub("_","-",model)
+  titl <- substitute(paste(t, " : ", italic(g)),list(t=t,g=mygene))
+  max.y = round(max(-log(2*pnorm(-abs(gwas.df$Z),lower.tail=TRUE),base=10)),-1)
+  if (max.y==10){
+    br <- seq(0, max.y, 2)
+  } else{
+    br <- seq(0,max.y,10)
+  }
+  gwas.plt <- ggplot(data=gwas.df,aes(x=POS/10^6,
+                                      y=-log(2*pnorm(-abs(Z),lower.tail=TRUE),
+                                             base=10))) + 
+    geom_point(size=2.5,alpha=0.7,shape=21,color="darkgray",fill="grey") + 
+    theme_bw() + coord_cartesian(xlim=c(start/10^6,end/10^6),
+                                 ylim=c(0,max.y),expand=FALSE) + 
+    scale_y_continuous(breaks=br) + 
+    ylab(expression(-log[10](italic("p-value")))) + 
+    geom_hline(yintercept=-log(5*10^-8,base=10)) + 
+    ggtitle(titl) + 
+    geom_text_repel(data=gwas.pred.df,aes(x=POS/10^6,
+                                          y=-log(2*pnorm(-abs(Z),lower.tail=TRUE),base=10),
+                                     label=SNP),size=2.25) + 
+    geom_point(data=gwas.pred.df,aes(x=POS/10^6,
+                                          y=-log(2*pnorm(-abs(Z),lower.tail=TRUE),base=10)),
+                                     fill="purple1",size=2.5,shape=21,alpha=0.5) +     
+    annotate(geom="segment",x=txstart/10^6,xend=txend/10^6,y=0,
+        yend=0,color="black",size=3) + 
+    theme(plot.title = element_text(face="bold"),
+          axis.title.x=element_blank(),
+          axis.text.x=element_blank(),
+          axis.ticks.x=element_blank(),
+          legend.position = "bottom",
+          legend.key = element_rect(colour = "black"),
+          legend.key.size = unit(0.4, "cm"),
+          legend.text = element_text(size = 6),
+          panel.grid.minor=element_blank());gwas.plt
+  ## eQTL 
+  gtex.path <- tarbell.dir %&% "TW_" %&% model %&% "_" %&% mygene %&% ".gtex.txt.gz"
+  gtex.df <- fread("cat " %&% gtex.path %&% " | zmore")
+  names(gtex.df) <- c("rsid","pos","chrom","model","ensid","gtex.id",
+                      "tss.distance","gtex.p","slope","slope.se")
+  gtex.pred.df <- filter(gtex.df,rsid %in% mod.df$rsid)
+  names(gtex.pred.df)[1] <- "SNP"
+  gtex.pred.df <- inner_join(gwas.pred.df,gtex.pred.df,by="SNP")
+  gtex.pred.df <- process_pred_df(gtex.pred.df)
+  max.y.eqtl <- round(max(-log(gtex.pred.df$gtex.p,base=10)),-1)
+  if (max.y.eqtl==0){
+    max.y.eqtl=10 
+  }
+  gtex.plt <- ggplot(data=gtex.df,aes(x=pos/10^6,y=-log(gtex.p,base=10))) + 
+    geom_point(size=2.5,alpha=0.7,shape=21,color="darkgray",fill="grey") + 
+    theme_bw() + coord_cartesian(xlim=c(start/10^6,end/10^6),
+                                 ylim=c(0,max.y.eqtl),expand=FALSE) + 
+    ylab(expression(-log[10](italic("p-value")))) + 
+    geom_text_repel(data=gtex.pred.df,aes(x=pos/10^6,y=-log(gtex.p,base=10),
+                                     label=SNP),size=2.25) + 
+    geom_point(data=gtex.pred.df,aes(x=pos/10^6,y=-log(gtex.p,base=10)),
+               fill=gtex.pred.df$mycol,size=2.5,shape=21) + 
+    annotate(geom="segment",x=txstart/10^6,xend=txend/10^6,y=0,
+             yend=0,color="black",size=3) + 
+    scale_y_reverse(breaks=seq(0, max.y.eqtl, 2)) + 
+   xlab("Position on Chromosome " %&% chrom %&% " (Mb)") #+ ggtitle("GTEx") +
+    #xlab(""); gtex.plt
+  grid.arrange(gwas.plt,gtex.plt,ncol=1)
+}
+
+```
+
+```{r save_gw_sig_assocs, echo=FALSE}
+
+save_gw_sig_assoc <- function(){
+  out.dir <- save.dir %&% "genome_wide/"
+  miss.g <- c()
+  miss.m <- c() 
+  for (i in 1:dim(sig.df)){
+    print("Association: " %&% i) 
+    g <- sig.df[i,]$gene
+    m <- sig.df[i,]$model
+    print("Generating Miami plot: " %&% m %&% ", " %&% g)
+    readfile <- tarbell.dir %&% "TW_" %&% m %&% "_" %&% g %&% ".gtex.txt.gz"
+      
+    if (m != "Whole_Blood_DGN" & file.exists(readfile)==TRUE){
+      ggsave(miami(g,m),filename=out.dir%&%m%&%"."%&%g%&%".miami.pdf",
+             width=6,height=6)
+    } else{
+      miss.g <- append(miss.g,g)
+      miss.m <- append(miss.m,m)
+    }
+  }
+  missing.df <- as.data.frame(cbind(miss.g,miss.m))
+  names(missing.df) <- c("gene","model")
+  missing.df$gene <- as.character(missing.df$gene)
+  missing.df$model <- as.character(missing.df$model) 
+  saveRDS(missing.df,file=out.dir%&%"missing.df.RDS")
+}
+
+#save_gw_sig_assoc()
+
+
+```
+
+```{r save_lw_sig_assocs, echo=FALSE}
+
+
+save_lw_sig_assoc <- function(){
+  # Filter out genome-wide associations 
+  gw.pairs <- paste0(sig.df$gene,":",sig.df$model)
+  pairs <- paste0(lw.df$gene,":",gsub("TW_","",lw.df$model))
+  l.df <- cbind(lw.df,pairs)
+  l.df$pairs <- as.character(l.df$pairs)
+  sub.df <- filter(l.df,!(pairs %in% gw.pairs))
+  
+  out.dir <- save.dir %&% "locus_wide/"
+  miss.g <- c()
+  miss.m <- c() 
+  for (i in 1:dim(sub.df)){
+    print("Association: " %&% i) 
+    g <- sub.df[i,]$gene
+    m <- sub.df[i,]$model
+    m <- gsub("TW_","",m)
+    print("Generating Miami plot: " %&% m %&% ", " %&% g)
+    readfile <- tarbell.dir %&% "TW_" %&% m %&% "_" %&% g %&% ".gtex.txt.gz"
+      
+    if (m != "Whole_Blood_DGN" & file.exists(readfile)==TRUE){
+      ggsave(miami(g,m),filename=out.dir%&%m%&%"."%&%g%&%".miami.pdf",
+             width=6,height=6)
+    } else{
+      miss.g <- append(miss.g,g)
+      miss.m <- append(miss.m,m)
+    }
+  }
+  missing.df <- as.data.frame(cbind(miss.g,miss.m))
+  names(missing.df) <- c("gene","model")
+  missing.df$gene <- as.character(missing.df$gene)
+  missing.df$model <- as.character(missing.df$model) 
+  saveRDS(missing.df,file=out.dir%&%"missing.df.RDS")
+}
+
+save_lw_sig_assoc()
+
+```
+
+
+
+
