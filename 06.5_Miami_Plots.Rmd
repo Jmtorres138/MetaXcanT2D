@@ -66,7 +66,6 @@ diagram.df$POS <- as.integer(diagram.df$POS)
 diagram.df$CHR <- gsub("ch","",diagram.df$CHR)
 diagram.df$CHR <- as.integer(diagram.df$CHR)
 
-
 ```
 
 
@@ -122,7 +121,7 @@ get_model_snps <- function(mygene,model){
   file.path <- beta.dir %&% model %&% ".allBetas.txt.gz"
   temp.df <- fread("cat " %&% file.path %&% " | zmore")
   ensid <- filter(ggd.df,symbol==mygene)$ensgene
-  out.df <- filter(temp.df,grepl(ensid, temp.df$gene))
+  suppressWarnings(out.df <- filter(temp.df,grepl(ensid, temp.df$gene)))
   if (dim(out.df)[1]==0 | length(ensid) > 1){
     t.df <- fread("cat " %&% res.dir  %&% "TW_" %&% model %&% ".zscores.csv")
     ensid <- filter(t.df,gene_name==mygene)$gene
@@ -184,6 +183,8 @@ miami <- function(mygene,model){
   max.y = round(max(-log(2*pnorm(-abs(gwas.df$Z),lower.tail=TRUE),base=10)),-1)
   if (max.y==10){
     br <- seq(0, max.y, 2)
+  } else if (max.y==20){
+    br <- seq(0,max.y,5)
   } else{
     br <- seq(0,max.y,10)
   }
@@ -253,8 +254,111 @@ miami <- function(mygene,model){
     scale_y_reverse(breaks=seq(0, max.y.eqtl, 2)) + 
    xlab("Position on Chromosome " %&% chrom %&% " (Mb)") #+ ggtitle("GTEx") +
     #xlab(""); gtex.plt
-  grid.arrange(gwas.plt,gtex.plt,ncol=1)
+  miami.plt <- grid.arrange(gwas.plt,gtex.plt,ncol=1)
+  miami.plt
 }
+
+miami.save <- function(mygene,model,savename){
+  mod.df <- get_model_snps(mygene,model)
+  if (dim(mod.df)[1] == 0){ # Bug fix 
+    opt <- options(show.error.messages=FALSE) 
+    on.exit(options(opt)) 
+    stop("Problem looking up: " %&% mygene %&% ", " %&% model) 
+  }
+  chrom <- as.integer(get_chrom(mygene))
+  chrom <- as.integer(na.omit(chrom))[1] # Bug fix 
+  window <- get_window(mygene)
+  start <- window[[1]]
+  end <- window[[2]]
+  txint <- get_txint(mygene)
+  txstart <- txint[[1]]
+  txend <- txint[[2]]
+  ## GWAS data frame 
+  gwas.df <- filter(diagram.df,CHR==chrom,POS>=start,POS<=end)
+  gwas.pred.df <- filter(diagram.df,SNP %in% mod.df$rsid)#gwas.pred.df <- filter(gwas.df,SNP %in% mod.df$rsid)
+  t <- gsub("_","-",model)
+  titl <- substitute(paste(t, " : ", italic(g)),list(t=t,g=mygene))
+  max.y = round(max(-log(2*pnorm(-abs(gwas.df$Z),lower.tail=TRUE),base=10)),-1)
+  if (max.y==10){
+    br <- seq(0, max.y, 2)
+  } else if (max.y==20){
+    br <- seq(0,max.y,5)
+  } else{
+    br <- seq(0,max.y,10)
+  }
+  ## eQTL 
+  gtex.path <- tarbell.dir %&% "TW_" %&% model %&% "_" %&% mygene %&% ".gtex.txt.gz"
+  gtex.df <- fread("cat " %&% gtex.path %&% " | zmore")
+  names(gtex.df) <- c("rsid","pos","chrom","model","ensid","gtex.id",
+                      "tss.distance","gtex.p","slope","slope.se")
+  gtex.pred.df <- filter(gtex.df,rsid %in% mod.df$rsid)
+  names(gtex.pred.df)[1] <- "SNP"
+  gtex.pred.df <- inner_join(gwas.pred.df,gtex.pred.df,by="SNP")
+  gtex.pred.df <- process_pred_df(gtex.pred.df)
+  max.y.eqtl <- round(max(-log(gtex.pred.df$gtex.p,base=10)),-1)
+  if (max.y.eqtl==0){
+    max.y.eqtl=10 
+  }  
+  # In case GWAS is missing chrom or pos info but available in GTEx file 
+  for (i in 1:length(gwas.pred.df$SNP)){
+    s <- gwas.pred.df$SNP[i]
+    if (is.na(gwas.pred.df$CHR)[i]){
+      gwas.pred.df$CHR[i] <- filter(gtex.pred.df,SNP==s)$chrom
+    }
+    if (is.na(gwas.pred.df$POS)[i]){
+      gwas.pred.df$POS[i] <- filter(gtex.pred.df,SNP==s)$pos
+    }    
+  }
+  gwas.pred.df <- na.omit(gwas.pred.df)
+  ## MIAMI PLOT A (GWAS)
+  gwas.plt <- ggplot(data=gwas.df,aes(x=POS/10^6,
+                                      y=-log(2*pnorm(-abs(Z),lower.tail=TRUE),
+                                             base=10))) + 
+    geom_point(size=2.5,alpha=0.7,shape=21,color="darkgray",fill="grey") + 
+    theme_bw() + coord_cartesian(xlim=c(start/10^6,end/10^6),
+                                 ylim=c(0,max.y),expand=FALSE) + 
+    scale_y_continuous(breaks=br) + 
+    ylab(expression(-log[10](italic("p-value")))) + 
+    geom_hline(yintercept=-log(5*10^-8,base=10)) + 
+    ggtitle(titl) + 
+    geom_text_repel(data=gwas.pred.df,aes(x=POS/10^6,
+                                          y=-log(2*pnorm(-abs(Z),lower.tail=TRUE),base=10),
+                                     label=SNP),size=2.25) + 
+    geom_point(data=gwas.pred.df,aes(x=POS/10^6,
+                                          y=-log(2*pnorm(-abs(Z),lower.tail=TRUE),base=10)),
+                                     fill="purple1",size=2.5,shape=21,alpha=0.5) +     
+    annotate(geom="segment",x=txstart/10^6,xend=txend/10^6,y=0,
+        yend=0,color="black",size=3) + 
+    theme(plot.title = element_text(face="bold"),
+          axis.title.x=element_blank(),
+          axis.text.x=element_blank(),
+          axis.ticks.x=element_blank(),
+          legend.position = "bottom",
+          legend.key = element_rect(colour = "black"),
+          legend.key.size = unit(0.4, "cm"),
+          legend.text = element_text(size = 6),
+          panel.grid.minor=element_blank());gwas.plt
+  ## MIAMI Plot B (GTEx)
+  gtex.plt <- ggplot(data=gtex.df,aes(x=pos/10^6,y=-log(gtex.p,base=10))) + 
+    geom_point(size=2.5,alpha=0.7,shape=21,color="darkgray",fill="grey") + 
+    theme_bw() + coord_cartesian(xlim=c(start/10^6,end/10^6),
+                                 ylim=c(0,max.y.eqtl),expand=FALSE) + 
+    ylab(expression(-log[10](italic("p-value")))) + 
+    geom_text_repel(data=gtex.pred.df,aes(x=pos/10^6,y=-log(gtex.p,base=10),
+                                     label=SNP),size=2.25) + 
+    geom_point(data=gtex.pred.df,aes(x=pos/10^6,y=-log(gtex.p,base=10)),
+               fill=gtex.pred.df$mycol,size=2.5,shape=21) + 
+    annotate(geom="segment",x=txstart/10^6,xend=txend/10^6,y=0,
+             yend=0,color="black",size=3) + 
+    scale_y_reverse(breaks=seq(0, max.y.eqtl, 2)) + 
+   xlab("Position on Chromosome " %&% chrom %&% " (Mb)") #+ ggtitle("GTEx") +
+    #xlab(""); gtex.plt
+  #miami.plt <- grid.arrange(gwas.plt,gtex.plt,ncol=1)
+  miami.plt <- arrangeGrob(gwas.plt,gtex.plt,ncol=1)
+  ggsave(miami.plt,filename=savename,
+             width=5,height=6)
+}
+
 
 ```
 
@@ -273,7 +377,7 @@ save_gw_sig_assoc <- function(){
       
     if (m != "Whole_Blood_DGN" & file.exists(readfile)==TRUE){
       ggsave(miami(g,m),filename=out.dir%&%m%&%"."%&%g%&%".miami.pdf",
-             width=6,height=6)
+             width=5,height=6)
     } else{
       miss.g <- append(miss.g,g)
       miss.m <- append(miss.m,m)
@@ -293,7 +397,6 @@ save_gw_sig_assoc <- function(){
 
 ```{r save_lw_sig_assocs, echo=FALSE}
 
-
 save_lw_sig_assoc <- function(){
   # Filter out genome-wide associations 
   gw.pairs <- paste0(sig.df$gene,":",sig.df$model)
@@ -301,11 +404,14 @@ save_lw_sig_assoc <- function(){
   l.df <- cbind(lw.df,pairs)
   l.df$pairs <- as.character(l.df$pairs)
   sub.df <- filter(l.df,!(pairs %in% gw.pairs))
-  
   out.dir <- save.dir %&% "locus_wide/"
   miss.g <- c()
   miss.m <- c() 
-  for (i in 1:dim(sub.df)){
+  # Record of problematic association indexes 
+  # Need to manually save this by running code within miami.save function 
+  # But for some reason won't work when try to make function call to miami.save function 
+  bad.index <- c(21,22,23)
+  for (i in 24:dim(sub.df)[1]){
     print("Association: " %&% i) 
     g <- sub.df[i,]$gene
     m <- sub.df[i,]$model
@@ -313,9 +419,10 @@ save_lw_sig_assoc <- function(){
     print("Generating Miami plot: " %&% m %&% ", " %&% g)
     readfile <- tarbell.dir %&% "TW_" %&% m %&% "_" %&% g %&% ".gtex.txt.gz"
       
-    if (m != "Whole_Blood_DGN" & file.exists(readfile)==TRUE){
-      ggsave(miami(g,m),filename=out.dir%&%m%&%"."%&%g%&%".miami.pdf",
-             width=6,height=6)
+    if (m != "Whole_Blood_DGN" & file.exists(readfile)==TRUE & !(i %in% bad.index)){
+      miami.save(g,m,out.dir%&%m%&%"."%&%g%&%".miami.pdf")
+      #ggsave(miami(g,m),filename=out.dir%&%m%&%"."%&%g%&%".miami.pdf",
+      #       width=5,height=6)
     } else{
       miss.g <- append(miss.g,g)
       miss.m <- append(miss.m,m)
@@ -329,6 +436,10 @@ save_lw_sig_assoc <- function(){
 }
 
 save_lw_sig_assoc()
+
+ggsave(suppressWarnings(grid.arrange(gwas.plt,gtex.plt,ncol=1)),
+          filename=out.dir%&%m%&%"."%&%g%&%".miami.pdf",
+          width=5,height=6)
 
 ```
 

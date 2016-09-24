@@ -17,13 +17,94 @@ output:
 knitr::opts_chunk$set(echo = TRUE)
 ```
 
-Heuristic for assessing "Polygenicity" 
+```{r configure, echo=FALSE}
 
-```{r heuristic} 
-
-vcf.path <- "/group/im-lab/nas40t2/Data/dbGaP/GTEx/41400/gtex/exchange/" %&% "GTEx_phs000424/exchange/" %&% "analysis_releases/GTEx_Analysis_2014-06-13/genotypes/OMNI_arrays" %&% "GTEx_Analysis_2014-06-13_OMNI_2.5M_5M_451Indiv_allchr_genot_imput_info04_maf01_HEW1E6.vcf.gz"
-
+"%&%" <- function(a,b) paste0(a,b) 
 library("ceu1kg")
+library("dplyr")
+library("data.table")
+
+beta.dir <- "/Volumes/im-lab/nas40t2/jason/projects/MetaXcan/db_files/gtex_v6p/alpha_0.5/allBetas/"
+res.dir <- "/Volumes/im-lab/nas40t2/jason/projects/MetaXcan/results/DIAGRAM_ImpG_0.8_gtexV6p/alpha_0.5/"
+
+rds.dir <- "/Users/jtorres/Google Drive/Projects/MetaXcan/MetaXcanT2D/RDS.gtexV6p/"
+txt.dir <-"/Users/jtorres/Google Drive/Projects/MetaXcan/MetaXcanT2D/txt.gtexV6p/" 
+
+```
+
+
+```{r get_list_of_pairs, echo=FALSE}
+
+get_list_of_pairs <- function(){
+  sig.df <- filter(readRDS(rds.dir%&%"T2Dcore.df.RDS"),
+               diag.mult.correct==TRUE,model!="WholeBloodDGN",
+               model!="CrossTissue")
+  sig.df$diag.p.value <- as.numeric(sig.df$diag.p.value)
+  sig.df <- arrange(sig.df,diag.p.value)
+  gw.pairs <- paste0(sig.df$gene,":",sig.df$model)
+  sig.df <- cbind(sig.df,gw.pairs)
+  names(sig.df)[length(names(sig.df))] <- "pairs"
+  sig.df$pairs <- as.character(sig.df$pairs)
+  lw.df <- readRDS(rds.dir%&%"lw.rep.df.RDS")
+  pairs <- paste0(lw.df$gene,":",gsub("TW_","",lw.df$model))
+  l.df <- cbind(lw.df,pairs)
+  l.df$pairs <- as.character(l.df$pairs)
+  sub.df <- filter(l.df,!(pairs %in% gw.pairs))
+  gw.pairs
+  lw.pairs <- pairs
+  return(list(gw.pairs,lw.pairs))
+}
+
+pairs.list <- get_list_of_pairs()
+gw.pairs <- pairs.list[[1]]
+lw.pairs <- pairs.list[[2]]
+
+```
+
+
+```{r prepare_gwas}
+
+diag.path <- "/Volumes/im-lab/nas40t2/jason/projects/MetaXcan/meta_files/" %&% "ImpGformat/merged_output_files/impG_DIAGRAM/gwas_file_v6p/" %&% "diag3.z.impG_0.8.gtexV6p.txt.gz"
+diag.df <- fread("cat " %&% diag.path %&% " | zmore")
+
+```
+
+
+
+```{r get_chrom}
+
+ggd.df <- readRDS(rds.dir%&%"ggd.ref.df.RDS")
+
+get_chrom <- function(genename){
+  temp.df <- filter(ggd.df,symbol==genename)
+  temp.df <- filter(temp.df,chr %in% (1:23))[1,]
+  chrom <- temp.df$chr
+  return(chrom)
+}
+
+```
+
+
+```{r get_model_snps, echo=FALSE}
+
+get_model_snps <- function(mygene,model){
+  print("Looking up model SNPs: " %&% model %&% " ; " %&% mygene)
+  file.path <- beta.dir %&% model %&% ".allBetas.txt.gz"
+  temp.df <- fread("cat " %&% file.path %&% " | zmore")
+  ensid <- filter(ggd.df,symbol==mygene)$ensgene
+  suppressWarnings(out.df <- filter(temp.df,grepl(ensid, temp.df$gene)))
+  if (dim(out.df)[1]==0 | length(ensid) > 1){
+    t.df <- fread("cat " %&% res.dir  %&% "TW_" %&% model %&% ".zscores.csv")
+    ensid <- filter(t.df,gene_name==mygene)$gene
+    out.df <- filter(temp.df,grepl(ensid, temp.df$gene))
+  }
+  return(out.df)
+}
+
+```
+
+
+```{r ensid_ref,echo=FALSE}
 
 server.dir <- "/Volumes/im-lab/nas40t2/jason/projects/ReferenceData/UCSC/"
 gencode.path <- server.dir %&%  "GENCODE.Genes.V19.Basic.annotated.txt.gz"
@@ -34,19 +115,13 @@ gene2ensid <- function(mygene){
   return(genename)
 }
 
-beta.dir <- "/Volumes/im-lab/nas40t2/jason/projects/MetaXcan/db_files/gtex_v6p/alpha_0.5/allBetas/"
+```
 
-get_model_snps <- function(mygene,model){
-  print("Looking up model SNPs: " %&% model %&% " ; " %&% mygene)
-  file.path <- beta.dir %&% model %&% ".allBetas.txt.gz"
-  temp.df <- fread("cat " %&% file.path %&% " | zmore")
-  ensid <- filter(ggd.df,symbol==mygene)$ensgene
-  temp.df <- filter(temp.df,grepl(ensid, temp.df$gene))
-  return(temp.df)
-}
 
-# Test 
-mod.snps <- get_model_snps("TCF7L2","Artery_Aorta")$rsid
+Heuristic for assessing "Polygenicity" 
+
+```{r heuristic} 
+
 
 get_ld_matrix <- function(chrom,mod.snps){
   pat <- "chr" %&% chrom %&% ".rda"
@@ -59,9 +134,9 @@ get_ld_matrix <- function(chrom,mod.snps){
   ld.matrix <- ld(sub.matrix,depth=length(mod.snps),stats="R.squared")
   return(ld.matrix)
 }
-
+#/group/im-lab/nas40t2/jason/projects/MetaXcan/gtex_v6p_covariance/unscaled/0.5
 get_cov_matrix <- function(mygene,model){
-  cov.file <- "/Volumes/im-lab/nas40t2/jason/projects/MetaXcan/" %&% "gtex_covariance/unscaled/1/TW_" %&% model %&% "/covariance.txt.gz"
+  cov.file <- "/Volumes/im-lab/nas40t2/jason/projects/MetaXcan/gtex_v6p_covariance/unscaled/0.5/TW_" %&% model %&% ".txt.gz"
   df <- fread("cat " %&% cov.file %&% " | zmore")
   ensid <- gene2ensid(mygene)
   df <- na.omit(filter(df,GENE==ensid))
@@ -83,12 +158,12 @@ get_cov_matrix <- function(mygene,model){
 
 get_metaxcan_results <- function(mygene,model){
   file.path <- "/Volumes/im-lab/nas40t2/jason/projects/MetaXcan/results/" %&% 
-    "DIAGRAM3_ImpG_0.80/alpha_1/TW_" %&% model %&% ".zscores.csv"
+    "DIAGRAM_ImpG_0.8_gtexV6p/alpha_0.5/TW_" %&% model %&% ".zscores.csv"
   df <- filter(fread(file.path),gene_name==mygene)
   return(df)
 }
 
-heuristic <- function(mygene,model,gwas.df,ld.cutoff=0.8){
+heuristic <- function(mygene,model,gwas.df,ld.cutoff=0.3){
   # get metaxcan results 
   print("Loading MetaXcan result file...")
   mxn.df <- get_metaxcan_results(mygene,model)
@@ -96,6 +171,7 @@ heuristic <- function(mygene,model,gwas.df,ld.cutoff=0.8){
   sigma_g <- sqrt(mxn.df$VAR_g)
   # get chromsome 
   chrom <- as.integer(get_chrom(mygene))
+  chrom <- as.integer(na.omit(chrom))[1]
   # get model snps 
   mod.df <- get_model_snps(mygene,model)
   # load covariance matrix 
@@ -104,24 +180,38 @@ heuristic <- function(mygene,model,gwas.df,ld.cutoff=0.8){
   snps <- row.names(cov.mat)
   index <- match(snps,mod.df$rsid)
   mod.df <- mod.df[index,]
-  beta.vec <- matrix(mod.df$beta,ncol=1)
+  if (model=="Whole_Blood_DGN"){
+    beta.vec <- matrix(mod.df$weight,ncol=1)  
+  } else{
+    beta.vec <- matrix(mod.df$beta,ncol=1)
+  }
   ##sigma.g <- t(beta.vec) %*% cov.mat %*% beta.vec
   # get ld matrix 
   ld.mat <- as.matrix(get_ld_matrix(chrom,mod.df$rsid))  
+  # subset to SNPs in the GWAS 
+  mod.df <- filter(mod.df,rsid %in% gwas.df$SNP)
   # calculate terms for each SNP in the model
   print("Generating heuristic...")
   snp.vec <- c() 
   term.vec <- c() 
   for (i in 1:dim(mod.df)[1]){
     snp <- mod.df$rsid[i]
-    w_lg <- mod.df$beta[i]
-    alt_allele <- mod.df$alt[i]
+    if (model=="Whole_Blood_DGN"){
+      w_lg <- mod.df$weight[i]
+    } else{
+      w_lg <- mod.df$beta[i]
+    }
+    if (model=="Whole_Blood_DGN"){
+      alt_allele <- mod.df$eff_allele[i]
+    } else{
+      alt_allele <- mod.df$alt[i]
+    }
     gwas_effect_allele <- filter(gwas.df,SNP==snp)$A2
     if (gwas_effect_allele != alt_allele){
       w_lg <- (-1)*w_lg
     }
     index <- match(snp,snps)
-    sigma_l <- cov.mat[index,index]
+    sigma_l <- sqrt(cov.mat[index,index])
     gwas_z <- filter(gwas.df,SNP==snp)$Z
     term <- w_lg * (sigma_l / sigma_g) * gwas_z
     snp.vec <- append(snp.vec,snp)
@@ -170,17 +260,18 @@ heuristic <- function(mygene,model,gwas.df,ld.cutoff=0.8){
   return(list(heur,same,diff))  
 }
 
-build_heur_df <- function(gwas.df,ld.cutoff){
+build_heur_df <- function(pair.vec,gwas.df,ld.cutoff){
   gene.vec <- c()
   mod.vec <- c()
   heur.vec <- c() 
   same.vec <- c()
   diff.vec <- c()
-  bad.genes <- c("OR2H1","HCG27")
-  for (i in 1:dim(sig.df)[1]){
-    print(i)
-    mygene <- sig.df$gene[i]
-    mymod <- gsub("\\.","-",sig.df$model[i])
+  bad.genes <- c()
+  for (i in 1:length(pair.vec)){
+    print("Running association: " %&% i)
+    mypair <- strsplit(pair.vec[i],split=":")[[1]]
+    mygene <- mypair[1]
+    mymod <- mypair[2]#gsub("\\.","-",sig.df$model[i])
     if (!(mygene %in% bad.genes)){
       heur.list <- heuristic(mygene,mymod,gwas.df,ld.cutoff)
       heur <- heur.list[[1]]
@@ -201,21 +292,87 @@ build_heur_df <- function(gwas.df,ld.cutoff){
   out.df <- arrange(out.df,desc(heur.score))
 }
 
-heur80.df <- build_heur_df(diag.df,ld.cutoff=0.80)
-saveRDS(heur80.df,file=root.dir%&%"RDS/heur.ld80.df.RDS")
+build_heur_file <- function(pair.vec,gwas.df,ld.cutoff,filename){
+  manual.pairs <- c("HLA-A:Skin_Sun_Exposed_Lower_leg")#, # 33 gw
+                   # "FHIT:Whole_Blood", # 3 lw 
+                   # "C2:Adipose_Subcutaneous", #21
+                   # "CYP21A2:Adipose_Visceral_Omentum", #22
+                   # "DHX16:Brain_Cerebellar_Hemisphere",#23
+                   # "HCG27:Adipose_Subcutaneous", # 24
+                    #"HCG27:Artery_Tibial") #25
+  for (i in 38:length(pair.vec)){ 
+    print("Running association: " %&% i)
+    mypair <- strsplit(pair.vec[i],split=":")[[1]]
+    #mypair <- strsplit("HCG27:Artery_Tibial",split=":")[[1]] # Test, remove when done 
+    mygene <- mypair[1]
+    mymod <- mypair[2]#gsub("\\.","-",sig.df$model[i])
+    if (!(pair.vec[i] %in% manual.pairs)){
+      heur.list <- heuristic(mygene,mymod,gwas.df,ld.cutoff)
+      heur <- heur.list[[1]]
+      same.snps <- paste(heur.list[[2]],collapse=",")
+      diff.snps <- paste(heur.list[[3]],collapse=",")
+      out.df <- as.data.frame(cbind(mygene,mymod,heur,
+                              same.snps,diff.snps),
+                              stringsAsFactors=FALSE)      
+      names(out.df) <- c("gene","model","heur.score","same.snps","different.snps")
+      out.df$heur.score <- as.numeric(out.df$heur.score)
+      write.table(out.df,file=filename,sep="\t",quote=FALSE,row.names=FALSE,col.names=TRUE,append=TRUE)
+    }
+  }
+}
 
-heur50.df <- build_heur_df(diag.df,ld.cutoff=0.50)
-saveRDS(heur50.df,file=root.dir%&%"RDS/heur.ld50.df.RDS")
+```
 
-heur30.df <- build_heur_df(diag.df,ld.cutoff=0.30)
-saveRDS(heur30.df,file=root.dir%&%"RDS/heur.ld30.df.RDS")
 
-heur80.df <- readRDS(root.dir%&%"RDS/heur.ld80.df.RDS")
-heur50.df <- readRDS(root.dir%&%"RDS/heur.ld50.df.RDS")
-heur30.df <- readRDS(root.dir%&%"RDS/heur.ld50.df.RDS")
+Heuristic applied with ld cutoff 0.30 
 
-#miami("WFS1","Nerve-Tibial") # good example of possible "monogenic" 
-#miami("HMG20A","Pituitary") # good example of possible "polygenic" 
+```{r apply_gw30, echo=FALSE}
+
+filename <- txt.dir %&% "heur-ceu.gw.ld30.txt"
+file.create(filename)
+build_heur_file(gw.pairs,diag.df,ld.cutoff=0.30,filename)
+heur.ceu.gw.ld30.df <- fread(filename)
+heur.ceu.gw.ld30.df <- heur.ceu.gw.ld30.df[!duplicated(heur.ceu.gw.ld30.df),]
+#heur.ceu.gw.ld30.df <- heur.ceu.gw.ld30.df[2:dim(heur.ceu.gw.ld30.df)[1],]
+heur.ceu.gw.ld30.df <- filter(heur.ceu.gw.ld30.df, !(grepl("model",model)))
+names(heur.ceu.gw.ld30.df) <- c("gene","model","heur.score","same.snps","different.snps")
+heur.ceu.gw.ld30.df <- arrange(heur.ceu.gw.ld30.df,desc(heur.score))
+saveRDS(heur.ceu.gw.ld30.df,rds.dir%&%"heur.ceu.gw.ld30.df.RDS")
+
+```
+
+```{r apply_lw30, echo=FALSE}
+
+filename <- txt.dir %&% "heur-ceu.lw.ld30.txt"
+file.create(filename)
+build_heur_file(setdiff(lw.pairs,gw.pairs),diag.df,ld.cutoff=0.30,filename) #(cmd + return)
+heur.ceu.lw.ld30.df <- fread(filename)
+heur.ceu.lw.ld30.df <- heur.ceu.lw.ld30.df[!duplicated(heur.ceu.lw.ld30.df),]
+heur.ceu.lw.ld30.df <- filter(heur.ceu.lw.ld30.df, !(grepl("model",model)))
+names(heur.ceu.lw.ld30.df) <- c("gene","model","heur.score","same.snps","different.snps")
+heur.ceu.lw.ld30.df <- arrange(heur.ceu.lw.ld30.df,desc(heur.score))
+saveRDS(heur.ceu.lw.ld30.df,rds.dir%&%"heur.ceu.lw.ld30.df.RDS")
+
+```
+
+
+
+
+
+```{r}
+
+#heur80.df <- build_heur_df(diag.df,ld.cutoff=0.80)
+#saveRDS(heur80.df,file=rds.dir%&%"heur.ld80.df.RDS")
+
+#heur50.df <- build_heur_df(diag.df,ld.cutoff=0.50)
+#saveRDS(heur50.df,file=rds.dir%&%"heur.ld50.df.RDS")
+
+#heur30.df <- build_heur_df(diag.df,ld.cutoff=0.30)
+#saveRDS(heur30.df,file=rds.dir%&%"heur.ld30.df.RDS")
+
+#heur80.df <- readRDS(rds.dir%&%"heur.ld80.df.RDS")
+#heur50.df <- readRDS(rds.dir%&%"heur.ld50.df.RDS")
+#heur30.df <- readRDS(rds.dir%&%"heur.ld50.df.RDS")
 
 ```
 
