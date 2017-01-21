@@ -1,0 +1,180 @@
+---
+title: "Eval-modSNPs-ImpG"
+author: "Jason Torres"
+date: "July 26, 2016"
+output: pdf_document
+---
+
+This script appends imputed models SNPs (elastic net alpha=0.5; GTEx Version 6p) to GWAS Z-score files for DIAGRAM (trans-ethnic) and GERA-T2D studies 
+
+
+```{r setup, echo=FALSE}
+
+library("dplyr")
+library("data.table")
+library("ggplot2")
+
+"%&%" <- function(a,b) paste0(a,b)
+
+server.dir <- "./"
+
+beta.dir <- server.dir %&% "input_files/"
+
+```
+
+
+
+```{r get_all_model_snps, echo=FALSE}
+
+file.vec <- list.files(beta.dir)[grepl(".allBetas.txt.gz",list.files(beta.dir))]
+
+get_all_mod_snps <- function(){
+  snp.vec <- c()
+  for (f in file.vec){
+    print(f)
+    df <- fread("cat " %&% beta.dir%&%f %&% " | zmore")
+    snps <- df$rsid
+    snp.vec <- append(snp.vec,snps)
+  }
+  return(unique(snp.vec))
+}
+
+snp.vec <- get_all_mod_snps()
+saveRDS(snp.vec,file="intermediate_files/all_tw_modSNPs.RDS")
+```
+
+
+# DIAGRAM (trans-ethnic) 
+
+```{r diagram_setup, echo=FALSE}
+
+# DIAGRAM (trans-ethnic) Build37
+preimp.path <- server.dir %&% "input_files/diag3.txt.gz" 
+postimp.path <- server.dir %&% "intermediate_files/diag3.merged.imz.gz"
+
+```
+
+
+
+```{r evaluate_diagram_pre_imputation, echo=FALSE}
+
+diag.df <- fread("cat " %&% preimp.path %&% " | zmore")
+length(diag.df$SNP)
+length(snp.vec)
+print("There are " %&% length(intersect(diag.df$SNP,snp.vec)) %&% 
+        " (" %&% round(length(intersect(diag.df$SNP,snp.vec))/length(snp.vec),3) %&% ")" %&% 
+        " Model SNPs present in DIAGRAM (pre-imputation)")
+```
+
+
+```{r evaluate_diagram_post_imputation, echo=FALSE}
+
+diag.post.df <- fread("cat " %&% postimp.path %&% " | zmore")
+length(diag.post.df$SNP_id)
+length(snp.vec)
+print("There are " %&% length(intersect(diag.post.df$SNP_id,snp.vec)) %&% 
+        " (" %&% round(length(intersect(diag.post.df$SNP_id,snp.vec))/length(snp.vec),3) %&% ")" %&% 
+        " Model SNPs present in DIAGRAM (post-imputation)")
+```
+
+Now, will evaluate the additional set of Model SNPs introduced via imputation (ImpG-Summary)
+
+```{r additional_mod_snps, echo=FALSE}
+
+pre.mod.snps <- intersect(diag.df$SNP,snp.vec)
+post.mod.snps <- intersect(diag.post.df$SNP_id,snp.vec)
+addit.mod.snps <- setdiff(post.mod.snps,pre.mod.snps)
+write.table(addit.mod.snps,file = server.dir %&% "intermediate_files/model-snps-gained_gtexV6p.txt",sep="\t",quote = FALSE, 
+            col.names=FALSE,row.names=FALSE)
+
+eval.df <- filter(diag.post.df,SNP_id %in% addit.mod.snps)
+
+
+```
+
+## Quality distribution 
+
+* Prerequisite - Must run "00.2\_Append_r2pred.py script 
+
+```{r quality, echo=FALSE}
+
+file.name <- server.dir %&% "intermediate_files/" %&% "model-snps-gained_gtexV6p_DIAGRAM.txt.gz"
+
+df <- fread("cat " %&% file.name %&% " | zmore")
+filt.df <- df[!duplicated(df),]
+
+hist(filt.df$r2pred)
+# proportion of additional imputed model SNPs meeting / not meeting quality threshold of 0.80 
+sum(filt.df$r2pred >= 0.8) / dim(filt.df)[1]
+sum(filt.df$r2pred <  0.8) / dim(filt.df)[1]
+
+
+```
+
+
+# GERA 
+
+```{r gera_setup, echo=FALSE}
+
+preimp.path <- server.dir %&% "input_files/gera.txt.gz" 
+postimp.path <- server.dir %&% "meta_files/ImpGformat/merged_output_files/impG_GERA/file/gera.merged.imz.gz"
+
+```
+
+
+```{r evaluate_gera_pre_imputation, echo=FALSE}
+
+gera.df <- fread("cat " %&% preimp.path %&% " | zmore")
+length(gera.df$SNP)
+length(snp.vec)
+print("There are " %&% length(intersect(gera.df$SNP,snp.vec)) %&% 
+        " (" %&% round(length(intersect(gera.df$SNP,snp.vec))/length(snp.vec),3) %&% ")" %&% 
+        " Model SNPs present in GERA (pre-imputation)")
+```
+
+
+```{r evaluate_gera_post_imputation, echo=FALSE}
+
+gera.post.df <- fread("cat " %&% postimp.path %&% " | zmore")
+length(gera.post.df$SNP_id)
+length(snp.vec)
+print("There are " %&% length(intersect(gera.post.df$SNP_id,snp.vec)) %&% 
+        " (" %&% round(length(intersect(gera.post.df$SNP_id,snp.vec))/length(snp.vec),3) %&% ")" %&% 
+        " Model SNPs present in GERA (post-imputation)")
+```
+
+Now, will evaluate the additional set of Model SNPs introduced via imputation (ImpG-Summary)
+
+```{r additional_mod_snps_gera, echo=FALSE}
+
+pre.mod.snps <- intersect(gera.df$SNP,snp.vec)
+post.mod.snps <- intersect(gera.post.df$SNP_id,snp.vec)
+addit.mod.snps <- setdiff(post.mod.snps,pre.mod.snps)
+write.table(addit.mod.snps,file = server.dir %&% "intermediate_files/model-snps-gained_gtexV6p_GERA.txt",sep="\t",quote = FALSE, 
+            col.names=FALSE,row.names=FALSE)
+
+eval.df <- filter(gera.post.df,SNP_id %in% addit.mod.snps)
+
+
+```
+
+
+## Quality distribution 
+
+* Prerequisite - Must run "00.2\_Append_r2pred.py script  
+
+```{r quality_gera, echo=FALSE}
+
+file.name <- server.dir %&% "intermediate_files/model-snps-gained_gtexV6p_GERA.txt.gz"
+
+df <- fread("cat " %&% file.name %&% " | zmore")
+filt.df <- df[!duplicated(df),]
+
+hist(filt.df$r2pred)
+# proportion of addition imputed model SNPs meeting / not meeting quality threshold of 0.80 
+sum(filt.df$r2pred >= 0.8) / dim(filt.df)[1]
+sum(filt.df$r2pred <  0.8) / dim(filt.df)[1]
+
+
+```
+
