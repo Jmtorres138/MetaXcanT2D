@@ -390,6 +390,7 @@ fdr.genes <- na.omit(unique(names(fdr05.vec)))
 
 # Evaluation data frame 
 # Using sig df or T2Dcore.df 
+rds.dir <- root.dir %&% "RDS.gtexV6p/" 
 
 fdr.df <- dplyr::select(readRDS(rds.dir %&% "FDR05.sig.df.RDS"),
                         one_of("gene","model","type"))
