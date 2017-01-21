@@ -33,8 +33,9 @@ Genesets
 
 ```{r genesets, echo=FALSE}
 
-geneset.t2d <- readRDS(rds.dir%&%"replicated.p05.t2d.genes")
-geneset.novel <- readRDS(rds.dir%&%"replicated.p05.novel.genes")
+fdr.df <- readRDS(rds.dir%&%"FDR05.sig.df.RDS")
+geneset.t2d <- filter(fdr.df, type=="T2D.Gene" | nhgri.gene == TRUE)$gene #readRDS(rds.dir%&%"replicated.p05.t2d.genes")
+geneset.novel <- setdiff(fdr.df$gene, geneset.t2d) #readRDS(rds.dir%&%"replicated.p05.novel.genes")
 geneset <- c(geneset.t2d,geneset.novel)
 
 get_ensid <- function(genename){
@@ -217,5 +218,33 @@ saveRDS(gsea.novel.df, rds.dir%&%"gsea.p05.novel.df.RDS")
 ```
 
 
+# Write tables 
+
+```{r save_tables, echo=FALSE}
+
+library("stargazer")
+make.latex.table <- function(df,tabname,fname){
+  outpath <- tab.dir %&% fname %&% ".tex"
+  code <- stargazer(df,type="latex",title=tabname,summary=FALSE,
+                    out=outpath,rownames=FALSE)
+}
+
+make.gsea.table <- function(df,extra=NULL){
+  df <- filter(df,ontology=="BP")
+  df <- dplyr::select(df,term,over_represented_pvalue)[1:20,]
+  Rank <- 1:20; df <- cbind(Rank,df)
+  names(df) <- c("Rank","GO:BP Pathway","P-value")
+  tabname <- "Top GSEA Pathways for " %&% "FDR <= 0.05" %&% 
+             "-significant genes from " %&% "DIAGRAM" %&% 
+             " analysis" %&% extra
+  fname <- "diag" %&% extra %&% ".gsea" 
+  make.latex.table(df,tabname,fname)
+}
+
+make.gsea.table(gsea.df,extra="All")
+make.gsea.table(gsea.t2d.df,extra="t2d")
+make.gsea.table(gsea.novel.df,extra="novel")
+
+```
 
 

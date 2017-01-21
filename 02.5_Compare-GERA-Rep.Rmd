@@ -35,6 +35,14 @@ rep.df <- readRDS(rds.dir %&% "diag3/sig.genes.gera-rep.df.RDS")
 ```
 
 
+```{r gera_threshold, echo=FALSE}
+
+load(rds.dir%&%"gera/metaXcan.results.Rdata")
+gera.thresh <- 0.05 /length(na.omit(as.numeric(as.matrix(select(p.EN.df,contains("TW_"))))))
+
+```
+
+
 # Z-score Plots of Replicated Gene-models pairs 
 
 Directional comparison of Z-scores 
@@ -55,20 +63,32 @@ zscore_plot <- function(alpha){
     labels <- append(labels,lname)
   }
   rep.df <- cbind(rep.df,labels)
+  col.vec <- c()
+  for (i in 1:dim(rep.df)[1]){
+    r = rep.df$replicated[i]
+    p <- rep.df$gera.p.value[i]
+    if (r==FALSE){
+      col.vec<-append(col.vec,"grey")
+    } else if(r==TRUE & p <= gera.thresh){
+      col.vec<-append(col.vec,"dodgerblue4")
+    } else{
+      col.vec<-append(col.vec,"dodgerblue1")
+    }
+  }
   title <- "Directional Comparison between Studies" #\nalpha= " %&% alpha 
   plt <- ggplot(data=rep.df,aes(x=diag.z.score,y=gera.z.score)) +
-    geom_point(size=4,shape=21,aes(fill=replicated),show.legend=FALSE) +
-    #geom_text(aes(label=gene),nudge_y=0.5,size=3,angle=30) + 
-    #geom_text_repel(data=filter(rep.df,replicated==TRUE),aes(label=labels),
-    #                show.legend=FALSE,size=3,angle=30) + 
-    geom_text(data=filter(rep.df,replicated==TRUE),aes(label=labels),
-                    show.legend=FALSE,size=3,angle=30,nudge_x=0.2,nudge_y=0.8) + 
+    #geom_point(size=4,shape=21,aes(fill=replicated),show.legend=FALSE) +
+    geom_point(size=2,shape=21,fill=col.vec,show.legend=FALSE) +
+    geom_text_repel(data=filter(rep.df,replicated==TRUE,abs(diag.z.score)>=5,abs(gera.z.score)>=5,gera.p.value<=gera.thresh),aes(label=labels),
+                    show.legend=FALSE,size=3,angle=30) + 
     geom_hline(yintercept=0) + geom_vline(xintercept=0) + 
     xlab("Z-score in DIAGRAM Study") + 
     ylab("Z-score in GERA-T2D Study") + 
     ggtitle(title) + 
     #scale_fill_brewer(name="Replicated",palette="Set3") + 
-    scale_fill_manual(name="Replicated",values=c("grey","dodgerblue1")) + 
+    scale_fill_manual(name="Replicated")+#,values=c("grey","dodgerblue1")) + 
+    scale_x_continuous(breaks=seq(-10,10,2)) +
+    scale_y_continuous(breaks=seq(-10,10,2))+
     scale_alpha_manual(values= c(0.5, 1)) + 
     theme_bw() + 
     theme(plot.title = element_text(lineheight=.8, face="bold"),

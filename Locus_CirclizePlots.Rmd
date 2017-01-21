@@ -1,0 +1,88 @@
+---
+title: "Locus_CirclizePlot.Rmd"
+author: "Jason Torres"
+date: "October 4, 2016"
+output: pdf_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+
+```{r setup, echo=FALSE}
+
+library(dplyr)
+library(data.table)
+library(ggplot2)
+library(gridExtra)
+
+"%&%" <- function(a,b) paste0(a,b)
+
+root.dir <- "/Users/jtorres/Google Drive/Projects/MetaXcan/MetaXcanT2D/"
+rds.dir <- root.dir %&% "RDS.gtexV6p/"
+
+loci.df <- (readRDS(root.dir %&% "RDS.gtexV6p/loci.df.RDS")) %>% select(chrom:nearby.txend)
+
+```
+
+
+# Circlize plot 
+
+```{r circ_plot, echo=FALSE}
+
+library("circlize")
+set.seed(999) 
+bed = generateRandomBed()
+head(bed)
+bed = generateRandomBed(nr = 200, nc = 4)
+nrow(bed)
+bed = generateRandomBed(nc = 2, fun = function(k) runif(k))
+head(bed)
+par(mar = c(1, 1, 1, 1))
+circos.initializeWithIdeogram()
+df = data.frame(
+name = c("TP53", "TP63", "TP73"),
+start = c(7565097, 189349205, 3569084),
+end = c(7590856, 189615068, 3652765))
+circos.genomicInitialize(df)
+
+test.df <- select(del.df,one_of("chrom","locus.start","locus.end","locus"))
+names(test.df) <- c("chr","start","end","value1")
+test.df$chr <- paste0("chr",test.df$chr)
+circos.genomicInitialize(test.df)
+
+bed = generateRandomBed(nc = 1)
+head(bed)
+
+circos.clear()
+circos.par("gap.degree" = 1)
+circos.par("start.degree" = 90)
+circos.initializeWithIdeogram(chromosome.index = paste0("chr", 20:1),plotType = c("axis","labels"),track.height = 0.12, ideogram.height = 0.05)
+
+#circos.genomicTrackPlotRegion(test.df, panel.fun = function(region, value, ...) {
+#circos.genomicPoints(region, value, ...)
+#})
+
+circos.genomicTrackPlotRegion(test.df, panel.fun = function(region, value, ...) {
+circos.genomicRect(region, value, ytop = 40, ybottom = 0, col="dodgerblue3",border="dodgerblue3")})
+
+# loading sig results 
+
+mtxn.sig.loci.df <- readRDS(file=rds.dir%&%"mtxn.sig.loci.df.RDS")
+sig.loci <- filter(mtxn.sig.loci.df,mtxn.sig.lw.genes!="NA")$locus
+col.vec <- c()
+for (loc in test.df$value1){
+  if (loc %in% sig.loci){
+    col.vec <- append(col.vec,"red")
+  } else{
+    col.vec <- append(col.vec,"gray")
+  }
+}
+
+test2.df <- filter(test.df,value1 %in% sig.loci)
+
+circos.genomicTrackPlotRegion(test2.df, panel.fun = function(region, value, ...) {
+circos.genomicRect(region, value, ytop = 40, ybottom = 0, col="dodgerblue3",border="red")})
+```
+

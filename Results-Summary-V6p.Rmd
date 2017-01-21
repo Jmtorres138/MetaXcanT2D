@@ -33,8 +33,9 @@ loci.df <- readRDS(rds.dir%&%"loci.df.RDS")
 
 ```{r ebi_nhgri, echo=FALSE}
 
-ebi.dir <- "/Volumes/im-lab/nas40t2/jason/projects/ReferenceData/NHGRI/"
-ebi.file <- ebi.dir %&% "nhgri_ebi-trait-genes.txt.gz"
+#ebi.dir <- "/Volumes/im-lab/nas40t2/jason/projects/ReferenceData/NHGRI/"
+#ebi.file <- ebi.dir %&% "nhgri_ebi-trait-genes.txt.gz"
+ebi.file <- "files_from_tarbell/nhgri_ebi-trait-genes.txt.gz"
 
 ebi.df <- fread("cat " %&% ebi.file %&% " | zmore")
 names(ebi.df)<-c("trait","genes")

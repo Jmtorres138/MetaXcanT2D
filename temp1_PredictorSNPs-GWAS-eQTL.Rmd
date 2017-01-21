@@ -1,0 +1,224 @@
+---
+title: "10.1_PredictorSNPs-GWAS.Rmd"
+author: "Jason Torres"
+date: "June 7, 2016"
+output:
+  pdf_document:
+    toc: yes
+  html_document:
+    fig_caption: yes
+    highlight: textmate
+    number_sections: yes
+    theme: journal
+    toc: yes
+---
+
+
+```{r setup, echo=FALSE, include=FALSE}
+
+library(dplyr)
+library(ggplot2)
+library(gridExtra)
+library("data.table")
+library(reshape2)
+require("cowplot")
+
+"%&%" <- function(a,b) paste0(a,b)
+
+rds.dir <- "/Users/jtorres/Google Drive/Projects/MetaXcan/MetaXcanT2D/RDS/"
+fig.dir <- "/Users/jtorres/Google Drive/Projects/MetaXcan/MetaXcanT2D/figures/"
+ld.dir <- "/Users/jtorres/Google Drive/Projects/MetaXcan/MetaXcanT2D/LD/"
+tarbell.dir <- "/Volumes/im-lab/nas40t2/jason/projects/MetaXcan/results/predictors/"
+
+sig.df <- readRDS(rds.dir %&%  "/diag3/sig.gene.TW.CT.a1.df.RDS")
+#diagram.snps <- as.character(readRDS("/Volumes/im-lab/nas40t2/jason/projects/ReferenceData/diagramT2D/build37/diagram.build37.snps.RDS"))
+t2d.gene.portal.df <- fread("/Volumes/im-lab/nas40t2/jason/projects/ReferenceData/diagramT2D/Type_2_Diabetes_Genetics-March2016.csv")
+t2d.gene.portal.df$`p-value` <- as.numeric(t2d.gene.portal.df$`p-value`)
+t2d.gene.portal.df$`odds ratio` <- as.numeric(t2d.gene.portal.df$`odds ratio`)
+
+#diagram.df <- readRDS("/Volumes/im-lab/nas40t2/jason/projects/ReferenceData/" %&% "diagramT2D/build37/diagram.df.RDS")
+diagram.file <- "/Volumes/im-lab/nas40t2/jason/projects/MetaXcan/meta_files/" %&% "ImpGformat/merged_output_files/impG_DIAGRAM/gwas_file/diag3.z.impG_0.8.txt.gz"
+
+gera.file <- "/Volumes/im-lab/nas40t2/jason/projects/MetaXcan/meta_files/" %&% "ImpGformat/merged_output_files/impG_GERA/gwas_file/gera.z.impG_0.8.txt.gz"
+
+diagram.df <- fread("cat " %&% diagram.file %&% "  | zmore") 
+diagram.snps <- diagram.df$SNP 
+
+gera.df <- fread("cat " %&% gera.file %&% " | zmore")
+
+```
+
+
+
+```{r discovery_associations, echo=FALSE}
+
+lw.rep.df <- readRDS(rds.dir%&%"lw.rep.df.RDS")
+
+```
+
+
+Read Predictor SNP Functions
+
+```{r read_pred_snps, echo=FALSE}
+
+ggd.ref.df <- readRDS(paste0(rds.dir,"diag3/ggd.ref.df.RDS"))
+
+get_ensid <- function(genename){
+  ensid <- as.character((filter(ggd.ref.df,symbol==genename) %>% dplyr::select(ensgene))[1,1]) 
+  if (!is.na(ensid) & ensid=="character(0)"){
+    ensid <- NA 
+  }
+  return(ensid) 
+}
+
+read_pred_df <- function(my.model){
+  dir <- "/Volumes/im-lab/nas40t2/jason/projects/MetaXcan/db_files/gtex/alpha_1/allBetas/"
+  fname <- "cat " %&% dir %&% my.model %&% ".allBetas.txt.gz" %&% " | zmore"
+  df <- fread(fname)
+  return(df)
+}
+
+get_model_snps <- function(my.gene, my.model){
+  ensid <- get_ensid(my.gene)
+  mod.df <- read_pred_df(my.model)
+  #df <- filter(mod.df, gene == ensid)
+  df <- filter(mod.df, grepl(ensid,gene))
+
+  return(df)
+}
+
+model_snps_df <- function(my.gene, my.model){
+  temp.df <- get_model_snps(my.gene, my.model)
+  names(temp.df) <- c("ensid","rsid","mtxn.ref",
+                      "mtxn.alt","mtxn.beta","alpha")
+  gene <- rep(my.gene,dim(temp.df)[1])
+  model <- rep(my.model,dim(temp.df)[1])
+  out.df <- cbind(gene,model,temp.df)
+  out.df$gene <- as.character(out.df$gene)
+  out.df$model <- as.character(out.df$model)
+  return(out.df)
+}
+
+```
+
+
+Append DIAGRAM and GERA GWAS results 
+
+```{r append_gwas, echo=FALSE}
+
+append_diag_info_v1 <- function(model.snps.df){
+  extract.df <- filter(diagram.df,SNP %in% model.snps.df$rsid) %>% 
+    select(one_of("SNP","CHR","POS","RISK_ALLELE","OTHER_ALLELE","OR","P"))
+  names(extract.df) <- c("rsid","chr","pos","diag.risk.al",
+                         "diag.other.al","diag.or","diag.p")
+  temp.df <- full_join(model.snps.df,extract.df,by="rsid")
+  
+  extract.df <- filter(gera.df,SNP %in% model.snps.df$rsid) 
+  names(extract.df) <- c("rsid","gera.a1","gera.a2","gera.frq",
+                         "gera.info","gera.or","gera.se","gera.p")
+  out.df <- full_join(temp.df,extract.df,by="rsid")
+  return(out.df)
+}
+
+append_gwas_info <- function(model.snps.df){
+  extract.df <- filter(diagram.df,SNP %in% model.snps.df$rsid) %>% 
+    dplyr::select(one_of("SNP","A1","A2","Z","r2pred"))
+  names(extract.df) <- c("rsid","diag.a1",
+                         "diag.a2","diag.z","diag.r2pred")
+  temp.df <- full_join(model.snps.df,extract.df,by="rsid")
+  extract.df <- filter(gera.df,SNP %in% model.snps.df$rsid) 
+  names(extract.df) <- c("rsid","gera.a1",
+                         "gera.a2","gera.z","gera.r2pred")
+  out.df <- full_join(temp.df,extract.df,by="rsid")
+  diag.p <- 2*pnorm(-abs(out.df$diag.z),lower.tail=TRUE)
+  gera.p <- 2*pnorm(-abs(out.df$gera.z),lower.tail=TRUE)
+  out.df <- cbind(out.df,diag.p,gera.p)
+  return(out.df)
+}
+
+```
+
+
+Save predictor results for all significant genes
+
+
+```{r save_df, echo=FALSE}
+
+make_model_df <- function(){
+  out.df <- c() 
+  for (i in 1:dim(lw.rep.df)[1]){
+    g <- lw.rep.df$gene[i]; m <- lw.rep.df$model[i]
+    print("Index: " %&% i %&% ", Gene: " %&% g %&% ", Model: " %&% m)
+    temp.df <- model_snps_df(g, m)
+    temp.df <- append_diag_info_v1(temp.df)
+    out.df <- rbind(out.df,temp.df)
+  }
+  return(out.df)
+}
+
+modsnp.df <- make_model_df()
+
+saveRDS(modsnp.df,file=rds.dir %&% "mtxnsig-gene-pred.df.RDS")
+write.table(modsnp.df,file=tarbell.dir %&% "mtxnsig-gene-pred.txt",quote=FALSE,sep="\t",row.names=FALSE)
+#mod.vec <- sort(unique(res.df$model))
+#write.table(mod.vec,file=tarbell.dir %&% "model-key.txt",quote=FALSE,sep="\t",row.names=FALSE)
+modsnp.df <- readRDS(rds.dir %&% "mtxnsig-gene-pred.df.RDS")
+```
+
+
+# Add GTEx information 
+
+Before running code below, complete these steps first: 
+
+* VPN to tarbell server (UChicago)
+* run JTgetGTEx_eQTL.runjobs.py (in the tarbell.dir directory)
+* cat *.pred.gtex.txt > mtxn-sig.pred.gtex.txt
+* vim mtxn-sig.pred.gtex.txt and insert this header:
+  rsid    model   gtex.id   ensid   gtex.beta   gtex.t    gtex.p
+
+
+```{r append_gtex_eqtls, echo=FALSE}
+
+modsnp.df
+modsnp.df <- readRDS(file=rds.dir %&% "mtxnsig-gene-pred.df.RDS")
+
+gtex.df <- as.data.frame(fread(tarbell.dir %&% "mtxn-sig.pred.gtex.txt"))
+
+append_gtex_eqtl <- function(){
+  gtex.id <- c()
+  gtex.beta <- c()
+  gtex.t <- c()
+  gtex.p <- c() 
+  for (i in 1:dim(modsnp.df)[1]){
+    rs <- modsnp.df[i,4]
+    mod <- modsnp.df[i,2]
+    eid <- modsnp.df[i,3]
+    temp.df <- filter(gtex.df,rsid==rs,model==mod,ensid==eid)
+    if (dim(temp.df)[1]==0){
+      gtex.id <- append(gtex.id, NA)
+      gtex.beta <- append(gtex.beta, NA)
+      gtex.t <- append(gtex.t, NA)
+      gtex.p <- append(gtex.p, NA)      
+    } else{
+      gid <- temp.df[1,3]
+      gb <- temp.df[1,5]
+      gt <- temp.df[1,6]
+      gp <- temp.df[1,7]
+      gtex.id <- append(gtex.id, gid)
+      gtex.beta <- append(gtex.beta, gb)
+      gtex.t <- append(gtex.t, gt)
+      gtex.p <- append(gtex.p, gp)
+    }
+  }
+  out.df <- cbind(modsnp.df,gtex.id,gtex.beta,gtex.t,gtex.p)
+  out.df$gtex.id <- as.character(out.df$gtex.id)
+  return(out.df)
+}
+
+modsnp.gtex.df <- append_gtex_eqtl()
+saveRDS(modsnp.gtex.df, file=rds.dir %&% "modsnp.gtex.df.RDS")
+
+```
+
+
+

@@ -1,0 +1,137 @@
+---
+title: "Tissues"
+author: "Jason Torres"
+date: "October 30, 2016"
+output: pdf_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+# Setup
+
+```{r setup, echo=FALSE}
+library("dplyr")
+library("ggplot2")
+library("qqman")
+library("gridExtra")
+library("grid")
+library("data.table")
+"%&%" <- function(a,b) paste0(a,b) 
+
+root.dir <- "/Users/jtorres/Google Drive/Projects/MetaXcan/MetaXcanT2D/"
+txt.dir <- "txt.gtexV6p/"
+rds.dir <- root.dir %&% "RDS.gtexV6p/" 
+fig.dir <- root.dir %&% "figures.gtexV6p/" 
+pdf.dir <- root.dir %&% "pdf.gtexV6p/" 
+ggd.ref.df <- readRDS(paste0(rds.dir,"ggd.ref.df.RDS"))
+
+```
+
+# Tissue enrichment 
+
+```{r}
+
+load(rds.dir%&%"diag3/metaXcan.results.Rdata")
+df <- dplyr::select(z.EN.df,contains("TW_"))
+mods <- names(df)
+zsq <- c()
+for (c in 1:dim(df)[2]){
+  vec <- na.omit(as.numeric(df[,c]))
+  val <- (vec)^2
+  mean <- mean(val)
+  zsq <- append(zsq,mean)
+}
+z2.df <- as.data.frame(cbind(mods,zsq),stringsAsfactors=FALSE)
+z2.df$mods <- as.character(z2.df$mods)
+z2.df$zsq <- as.numeric(as.character(z2.df$zsq))
+z2.df$mods <- gsub("TW_","",z2.df$mods)
+write.table(z2.df,file=txt.dir%&%"tissues.z2.txt",sep="\t",quote=FALSE,row.names=FALSE)
+z2.df <- read.table(file=txt.dir%&%"tissues.z2.sampsize.txt",header=TRUE,stringsAsFactors=FALSE)
+
+plt <- ggplot(data=z2.df,aes(x=samp.size,y=zsq)) + 
+  geom_point(size=2.5,shape=21,fill="blue2",color="blue4",alpha=0.5) +
+  theme_bw() + 
+  scale_x_continuous(breaks=seq(0,950,50)) +
+  scale_y_continuous(breaks=seq(0,1.2,0.05)) + 
+  xlab("Sample Size") + ylab("Mean Square Z-score") + 
+  theme(axis.text.x=element_text(angle=-30),
+        panel.grid.minor=element_blank()); plt
+
+cor.test(z2.df$samp.size,z2.df$zsq,
+         method="spearman")
+
+#	Spearman's rank correlation rho
+
+#data:  z2.df$samp.size and z2.df$zsq
+#S = 1709.2, p-value = 4.687e-16
+#alternative hypothesis: true rho is not equal to 0
+#sample estimates:
+#      rho 
+#0.8874028 
+
+rank.size.df <- dplyr::select(z2.df,one_of("mods","samp.size")) %>% 
+  arrange(desc(samp.size))
+size.rank <- 1:dim(rank.size.df)[1]
+rank.size.df <- cbind(rank.size.df,size.rank)
+
+rank.z2.df <- dplyr::select(z2.df,one_of("mods","zsq")) %>% 
+  arrange(desc(zsq))
+z2.rank <- 1:dim(rank.z2.df)[1]
+rank.z2.df <- cbind(rank.z2.df,z2.rank)
+
+df <- inner_join(z2.df,rank.size.df,by="mods")
+df <- inner_join(df,rank.z2.df,by="mods")
+df <- select(df,one_of("mods","samp.size.x","size.rank","zsq.x","z2.rank"))
+df$mods <- gsub("_","-",df$mods)
+names(df) <- c("Tissue","Sample.Size","Size.Rank","MSZ","MSZ.Rank")
+df <- arrange(df,desc(MSZ))
+df <- select(df,one_of("Tissue","Sample.Size","MSZ","Size.Rank","MSZ.Rank"))
+
+```
+
+
+```{r save_table,echo=FALSE}
+
+enrich <- df$MSZ.Rank < df$Size.Rank
+# "Pretty-fy" data frame 
+plt.df <- df
+plt.df$MSZ <- prettyNum(plt.df$MSZ,digits=4)
+plt.df <- select(plt.df,one_of("Tissue","MSZ.Rank",
+                               "Size.Rank","Sample.Size",
+                               "MSZ"))
+
+edit_cell <- function(table, row, col, name="core-fg", ...){
+  #http://stackoverflow.com/questions/32173928/r-tablegrob-change-format-of-row
+  row <- row + 1 # my adjustment 
+  col <- col + 1 # my adjustment
+  l <- table$layout
+  ids <- which(l$t %in% row & l$l %in% col & l$name==name)
+  for (id in ids){
+  newgrob <- editGrob(table$grobs[id][[1]], ...)
+  table$grobs[id][[1]] <- newgrob
+  }
+  table
+}
+
+mytheme <- gridExtra::ttheme_default(
+  core = list(fg_params=list(cex = 0.7),
+                bg_params=list(fill="ghostwhite",alpha=0.3,col="black")),
+    colhead = list(fg_params=list(cex = 0.9),
+                   bg_params=list(alpha=0.30,col="black")),
+    rowhead = list(fg_params=list(cex = 0))) 
+
+names(plt.df) <- c("Tissue","Mean Square\nZ-score Rank","Sample Size\nRank","Sample Size","Mean Square\nZ-score")
+
+tabgrob <- tableGrob(plt.df,
+                    theme=mytheme)
+vec <- (1:dim(plt.df)[1])[enrich]
+tabgrob <- edit_cell(tabgrob, row=vec, col=1, "core-bg",
+                gp=gpar(fill="gray",alpha=0.8,
+                        col = "black", lwd=2))
+plt <- grid.arrange(tabgrob,nrow=1,ncol=1)
+ggsave(pdf.dir%&%"tissue-rank.table.pdf",plot=plt,
+       width = 7, height = 16)
+```
+

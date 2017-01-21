@@ -325,6 +325,7 @@ string_process <- function(string.vec){
   return(out.vec)
 }
 
+
 plot.df <- select(msig.loci.df,one_of("chrom","locus","locus.rep.genes",
                                       "locus.start","locus.end","mtxn.sig.gw.genes",
                                       "mtxn.sig.gw.models","mtxn.sig.lw.genes",
@@ -332,11 +333,13 @@ plot.df <- select(msig.loci.df,one_of("chrom","locus","locus.rep.genes",
 plot.df$locus.rep.genes <- as.character(plot.df$locus.rep.genes)
 plot.df$mtxn.sig.gw.genes <- as.character(plot.df$mtxn.sig.gw.genes)
 plot.df$mtxn.sig.gw.models <- as.character(plot.df$mtxn.sig.gw.models)
+plot.df$mtxn.sig.gw.models <- gsub("TW_","",plot.df$mtxn.sig.gw.models)            
+plot.df$mtxn.sig.gw.models <- gsub("_",".",plot.df$mtxn.sig.gw.models)  
 plot.df$mtxn.sig.lw.genes <- as.character(plot.df$mtxn.sig.lw.genes)
 plot.df$mtxn.sig.lw.models <- as.character(plot.df$mtxn.sig.lw.models)            
 plot.df$mtxn.sig.lw.models <- as.character(plot.df$mtxn.sig.lw.models)            
 plot.df$mtxn.sig.lw.models <- gsub("TW_","",plot.df$mtxn.sig.lw.models)            
-plot.df$mtxn.sig.lw.models <- gsub("-",".",plot.df$mtxn.sig.lw.models)            
+plot.df$mtxn.sig.lw.models <- gsub("_",".",plot.df$mtxn.sig.lw.models)            
 
 
 plot.df$locus.rep.genes <- string_process(plot.df$locus.rep.genes)
@@ -345,10 +348,109 @@ plot.df$mtxn.sig.gw.models <- string_process(plot.df$mtxn.sig.gw.models)
 plot.df$mtxn.sig.lw.genes <- string_process(plot.df$mtxn.sig.lw.genes)
 plot.df$mtxn.sig.lw.models <- string_process(plot.df$mtxn.sig.lw.models)            
 
+
+
+
+plot.sig.df <- filter(plot.df,mtxn.sig.lw.genes!="NA")
+plot.sig.df <- select(plot.sig.df,one_of("chrom","locus.start","locus.end","locus.rep.genes","mtxn.sig.gw.genes","mtxn.sig.gw.models","mtxn.sig.lw.genes","mtxn.sig.lw.models"))
+#names(plot.sig.df) <- c("Chr","Region\nStart","Region\nEnd","Reported\nGenes","Genome-significant\nGenes","Genome-significant\nModels","Region-significant\nGenes","Region-significant\nModels") 
+names(plot.sig.df) <- c("Chr","Region\nStart","Region\nEnd","Reported\nGenes","gw.genes","gw.models","lw.genes","lw.models") 
+
+get_pairs <- function(gstring,mstring){
+  pair.vec <- c()
+  g.vec <- strsplit(gstring,",")[[1]]
+  m.vec <- strsplit(mstring,",")[[1]]
+  for (i in 1:length(g.vec)){
+    if (grepl("\n",g.vec[i]) & grepl(" ",g.vec[i])){
+      g.vec[i] <- gsub(" ","",g.vec[i])
+      m.vec[i] <- gsub(" ","",m.vec[i])
+      gvec2 <- strsplit(g.vec[i],"\n")[[1]]
+      mvec2 <- strsplit(m.vec[i],"\n")[[1]]
+      for (e in 1:length(gvec2)){
+        g <- gvec2[e]
+        m <- mvec2[e]
+        pair.vec <- append(pair.vec,paste0(g,":",m))
+      }
+    } else{
+      g <- g.vec[i]
+      m <- m.vec[i]
+      pair.vec <- append(pair.vec,paste0(g,":",m))
+    }
+  }
+  return(pair.vec)
+}
+
+split_pairs <- function(pair.vec){
+  g.vec <- c()
+  m.vec <- c()
+  for (e in 1:length(pair.vec)){
+    string <- pair.vec[e]
+    vec <- strsplit(string,":")[[1]]
+    g.vec <- append(g.vec,vec[1])
+    m.vec <- append(m.vec,vec[2])
+  }
+  return(list(g.vec,m.vec))
+}
+
+
+for (i in 1:dim(plot.sig.df)[1]){
+  print(i)
+  gw.genes <- plot.sig.df$gw.genes[i]
+  gw.models <- plot.sig.df$gw.models[i]
+  lw.genes <- plot.sig.df$lw.genes[i]
+  lw.models <- plot.sig.df$lw.models[i]
+  # Get pairs
+  gw.pairs <- get_pairs(gw.genes,gw.models)
+  lw.pairs <- get_pairs(lw.genes,lw.models)
+  lw.pairs <- setdiff(lw.pairs,gw.pairs)
+  if (length(gw.pairs)==0){
+    gw.pairs <- "NA:NA"
+  }
+  if (length(lw.pairs)==0){
+    lw.pairs <- "NA:NA"
+  }
+  # gw genes 
+  gw.genes <- split_pairs(gw.pairs)[[1]]
+  gw.genes <- paste0(gw.genes,collapse=",")
+  gw.genes <- string_process(gw.genes)
+  plot.sig.df$`Genome-significant
+Genes`[i] <- gw.genes
+  # gw models 
+  gw.models <- split_pairs(gw.pairs)[[2]]
+  gw.models <- paste0(gw.models,collapse=",")
+  gw.models <- string_process(gw.models)
+  plot.sig.df$`Genome-significant
+Models`[i] <- gw.models
+  # lw genes 
+  lw.genes <- split_pairs(lw.pairs)[[1]]
+  lw.genes <- paste0(lw.genes,collapse=",")
+  lw.genes <- string_process(lw.genes)
+  plot.sig.df$`Region-significant
+Genes`[i] <- lw.genes
+  # lw models 
+  lw.models <- split_pairs(lw.pairs)[[2]]
+  lw.models <- paste0(lw.models,collapse=",")
+  lw.models <- string_process(lw.models)
+  plot.sig.df$`Region-significant
+Models`[i] <- lw.models
+  
+}
+
+
+plot.sig.df <- select(plot.sig.df,-contains("gw")) %>% select(-contains("lw"))
+plt.sig1 <- grid.arrange(tableGrob(plot.sig.df[1:28,],
+                               theme=mytheme),nrow=1,ncol=1)
+ggsave(fig.dir%&%"windows.sig.gene.table.p1.pdf",plt.sig1,width=17,height=32)
+
+plt.sig2 <- grid.arrange(tableGrob(plot.sig.df[29:33,],
+                               theme=mytheme),nrow=1,ncol=1)
+ggsave(fig.dir%&%"windows.sig.gene.table.p2.pdf",plt.sig2,width=17,height=32)
+
+
+
 plt1 <- grid.arrange(tableGrob(plot.df,
                                theme=mytheme),nrow=1,ncol=1)
-
-ggsave(fig.dir%&%"windows.sig.gene.table.pdf",plt1,width=17,height=32)
+ggsave(fig.dir%&%"windows.table.pdf",plt1,width=17,height=32)
                   
 ```
 

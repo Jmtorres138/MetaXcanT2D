@@ -113,7 +113,7 @@ get_txint <- function(genename){
 ```{r main_function}
 
 beta.dir <- "/Volumes/im-lab/nas40t2/jason/projects/MetaXcan/db_files/gtex_v6p/alpha_0.5/allBetas/"
-res.dir <- "/Volumes/im-lab/nas40t2/jason/projects/MetaXcan/results/DIAGRAM_ImpG_0.8_gtexV6p/alpha_0.5/" #TW_Whole_Blood.zscores.csv
+res.dir <- "/Volumes/im-lab/nas40t2/jason/projects/MetaXcan/results/DIAGRAM_ImpG_0.8_gtexV6p/alpha_0.5/"
 
 
 get_model_snps <- function(mygene,model){
@@ -130,23 +130,27 @@ get_model_snps <- function(mygene,model){
   return(out.df)
 }
 
-process_pred_df <- function(pred.df){
-  gtex.A1 <- c()
-  gtex.A2 <- c()
-  for (id in pred.df$gtex.id){
-    vec <- strsplit(id,split="_")[[1]]
-    gtex.A1<- append(gtex.A1,vec[3])
-    gtex.A2<- append(gtex.A2,vec[4])
-  }
-  effect.allele <- pred.df$A2
-  eval.vec <- effect.allele == gtex.A2
+process_pred_df <- function(mod.df,pred.df){
   adj.slope <- pred.df$slope
-  for (e in 1:length(eval.vec)){
-    if (e ==FALSE){
-      adj.slope[e] <- (-1)*adj.slope[e]
+  for (i in 1:dim(pred.df)[1]){
+    rs <- pred.df$SNP[i] 
+    model.effect.allele <- filter(mod.df,rsid==rs)$alt
+    model.effect <- filter(mod.df,rsid==rs)$beta
+    disease.allele <- filter(pred.df,SNP==rs)$A2
+    disease.z <- filter(pred.df,SNP==rs)$Z
+    gtex.id <- pred.df$gtex.id[i]
+    gtex.vec <- strsplit(gtex.id,split="_")[[1]]
+    gtex.effect.allele <- gtex.vec[4]
+    gtex.effect <- pred.df$slope[i]
+    # First correction
+    if (model.effect.allele != gtex.effect.allele){
+      adj.slope[i] <- (-1) * adj.slope[i] 
+    }
+    # Second correction
+    if (disease.allele != gtex.effect.allele){
+      adj.slope[i] <- (-1) * adj.slope[i]
     }
   }
-  adj.slope
   mycol <- c()
   for (col in adj.slope){
     if (col < 0){
@@ -159,8 +163,7 @@ process_pred_df <- function(pred.df){
   return(out.df)
 }
 
-
-miami <- function(mygene,model){
+miami.null <- function(mygene,model,manual.max.y=NA,refgene){
   mod.df <- get_model_snps(mygene,model)
   if (dim(mod.df)[1] == 0){ # Bug fix 
     opt <- options(show.error.messages=FALSE) 
@@ -175,6 +178,9 @@ miami <- function(mygene,model){
   txint <- get_txint(mygene)
   txstart <- txint[[1]]
   txend <- txint[[2]]
+  txint.ref <- get_txint(refgene)
+  txstart.ref <- txint.ref[[1]]
+  txend.ref <- txint.ref[[2]]
   ## GWAS data frame 
   gwas.df <- filter(diagram.df,CHR==chrom,POS>=start,POS<=end)
   gwas.pred.df <- filter(diagram.df,SNP %in% mod.df$rsid)#gwas.pred.df <- filter(gwas.df,SNP %in% mod.df$rsid)
@@ -196,11 +202,14 @@ miami <- function(mygene,model){
   gtex.pred.df <- filter(gtex.df,rsid %in% mod.df$rsid)
   names(gtex.pred.df)[1] <- "SNP"
   gtex.pred.df <- inner_join(gwas.pred.df,gtex.pred.df,by="SNP")
-  gtex.pred.df <- process_pred_df(gtex.pred.df)
+  gtex.pred.df <- process_pred_df(mod.df,gtex.pred.df)
   max.y.eqtl <- round(max(-log(gtex.pred.df$gtex.p,base=10)),-1)
   if (max.y.eqtl==0){
-    max.y.eqtl=10 
+    max.y.eqtl=10
   }  
+  if (!is.na(manual.max.y)){
+    max.y.eqtl=manual.max.y
+  }
   # In case GWAS is missing chrom or pos info but available in GTEx file 
   for (i in 1:length(gwas.pred.df$SNP)){
     s <- gwas.pred.df$SNP[i]
@@ -222,14 +231,16 @@ miami <- function(mygene,model){
     ylab(expression(-log[10](italic("p-value")))) + 
     geom_hline(yintercept=-log(5*10^-8,base=10)) + 
     ggtitle(titl) + 
-    geom_text_repel(data=gwas.pred.df,aes(x=POS/10^6,
-                                          y=-log(2*pnorm(-abs(Z),lower.tail=TRUE),base=10),
-                                     label=SNP),size=2.25) + 
-    geom_point(data=gwas.pred.df,aes(x=POS/10^6,
-                                          y=-log(2*pnorm(-abs(Z),lower.tail=TRUE),base=10)),
-                                     fill="purple1",size=2.5,shape=21,alpha=0.5) +     
+    #geom_text_repel(data=gwas.pred.df,aes(x=POS/10^6,
+    #                                      y=-log(2*pnorm(-abs(Z),lower.tail=TRUE),base=10),
+    #                                 label=SNP),size=2.25) + 
+    #geom_point(data=gwas.pred.df,aes(x=POS/10^6,
+    #                                      y=-log(2*pnorm(-abs(Z),lower.tail=TRUE),base=10)),
+    #                                 fill="purple1",size=2.5,shape=21,alpha=0.5) +     
     annotate(geom="segment",x=txstart/10^6,xend=txend/10^6,y=0,
-        yend=0,color="black",size=3) + 
+        yend=0,color="red",size=2) + 
+    annotate(geom="segment",x=txstart.ref/10^6,xend=txend.ref/10^6,y=0,
+        yend=0,color="black",size=2) + 
     theme(plot.title = element_text(face="bold"),
           axis.title.x=element_blank(),
           axis.text.x=element_blank(),
@@ -245,18 +256,372 @@ miami <- function(mygene,model){
     theme_bw() + coord_cartesian(xlim=c(start/10^6,end/10^6),
                                  ylim=c(0,max.y.eqtl),expand=FALSE) + 
     ylab(expression(-log[10](italic("p-value")))) + 
-    geom_text_repel(data=gtex.pred.df,aes(x=pos/10^6,y=-log(gtex.p,base=10),
-                                     label=SNP),size=2.25) + 
-    geom_point(data=gtex.pred.df,aes(x=pos/10^6,y=-log(gtex.p,base=10)),
-               fill=gtex.pred.df$mycol,size=2.5,shape=21) + 
+    #geom_text_repel(data=gtex.pred.df,aes(x=pos/10^6,y=-log(gtex.p,base=10),
+    #                                 label=SNP),size=2.25) + 
+    #geom_point(data=gtex.pred.df,aes(x=pos/10^6,y=-log(gtex.p,base=10)),
+    #           fill=gtex.pred.df$mycol,size=2.5,shape=21) + 
     annotate(geom="segment",x=txstart/10^6,xend=txend/10^6,y=0,
-             yend=0,color="black",size=3) + 
+             yend=0,color="red",size=2) + 
+    annotate(geom="segment",x=txstart.ref/10^6,xend=txend.ref/10^6,y=0,
+        yend=0,color="black",size=2) + 
     scale_y_reverse(breaks=seq(0, max.y.eqtl, 2)) + 
    xlab("Position on Chromosome " %&% chrom %&% " (Mb)") #+ ggtitle("GTEx") +
     #xlab(""); gtex.plt
   miami.plt <- grid.arrange(gwas.plt,gtex.plt,ncol=1)
   miami.plt
 }
+
+miami <- function(mygene,model,manual.max.y.gwas=NA,manual.max.y.eqtl=NA,refgene,gwas.sig.only=FALSE){
+  mod.df <- get_model_snps(mygene,model)
+  if (dim(mod.df)[1] == 0){ # Bug fix 
+    opt <- options(show.error.messages=FALSE) 
+    on.exit(options(opt)) 
+    stop("Problem looking up: " %&% mygene %&% ", " %&% model) 
+  }
+  chrom <- as.integer(get_chrom(mygene))
+  chrom <- as.integer(na.omit(chrom))[1] # Bug fix 
+  window <- get_window(mygene)
+  start <- window[[1]]
+  end <- window[[2]]
+  txint <- get_txint(mygene)
+  txstart <- txint[[1]]
+  txend <- txint[[2]]
+  txint.ref <- get_txint(refgene)
+  txstart.ref <- txint.ref[[1]]
+  txend.ref <- txint.ref[[2]]
+  ## GWAS data frame 
+  gwas.df <- filter(diagram.df,CHR==chrom,POS>=start,POS<=end)
+  gwas.pred.df <- filter(diagram.df,SNP %in% mod.df$rsid)#gwas.pred.df <- filter(gwas.df,SNP %in% mod.df$rsid)
+  t <- gsub("_","-",model)
+  titl <- substitute(paste(t, " : ", italic(g)),list(t=t,g=mygene))
+  max.y = round(max(-log(2*pnorm(-abs(gwas.df$Z),lower.tail=TRUE),base=10)),-1)
+  if (max.y==10){
+    br <- seq(0, max.y, 2)
+  } else if (max.y==20){
+    br <- seq(0,max.y,5)
+  } else{
+    br <- seq(0,max.y,10)
+  }
+  if (!is.na(manual.max.y.gwas)){
+    max.y=manual.max.y.gwas
+    br <- seq(0,max.y,5)
+  }
+  ## eQTL 
+  gtex.path <- tarbell.dir %&% "TW_" %&% model %&% "_" %&% mygene %&% ".gtex.txt.gz"
+  gtex.df <- fread("cat " %&% gtex.path %&% " | zmore")
+  names(gtex.df) <- c("rsid","pos","chrom","model","ensid","gtex.id",
+                      "tss.distance","gtex.p","slope","slope.se")
+  gtex.pred.df <- filter(gtex.df,rsid %in% mod.df$rsid)
+  names(gtex.pred.df)[1] <- "SNP"
+  gtex.pred.df <- inner_join(gwas.pred.df,gtex.pred.df,by="SNP")
+  gtex.pred.df <- process_pred_df(mod.df,gtex.pred.df)
+  max.y.eqtl <- round(max(-log(gtex.pred.df$gtex.p,base=10)),-1)
+  if (max.y.eqtl==0){
+    max.y.eqtl=10
+  }  
+  if (!is.na(manual.max.y.eqtl)){
+    max.y.eqtl=manual.max.y.eqtl
+  }
+  # In case GWAS is missing chrom or pos info but available in GTEx file 
+  for (i in 1:length(gwas.pred.df$SNP)){
+    s <- gwas.pred.df$SNP[i]
+    if (is.na(gwas.pred.df$CHR)[i]){
+      gwas.pred.df$CHR[i] <- filter(gtex.pred.df,SNP==s)$chrom
+    }
+    if (is.na(gwas.pred.df$POS)[i]){
+      gwas.pred.df$POS[i] <- filter(gtex.pred.df,SNP==s)$pos
+    }    
+  }
+  if (gwas.sig.only==TRUE){
+    gwas.lab.df <- filter(gwas.pred.df,P<=(5*(10^-6)))
+    gtex.lab.df <- filter(gtex.pred.df,P<=(5*(10^-6)))
+  } else{
+    gwas.lab.df <- gwas.pred.df
+    gtex.lab.df <- gtex.pred.df    
+  }
+  ## MIAMI PLOT A (GWAS)
+  gwas.plt <- ggplot(data=gwas.df,aes(x=POS/10^6,
+                                      y=-log(2*pnorm(-abs(Z),lower.tail=TRUE),
+                                             base=10))) + 
+    geom_point(size=2.5,alpha=0.7,shape=21,color="darkgray",fill="grey") + 
+    theme_bw() + coord_cartesian(xlim=c(start/10^6,end/10^6),
+                                 ylim=c(0,max.y),expand=FALSE) + 
+    scale_y_continuous(breaks=br) + 
+    ylab(expression(-log[10](italic("p-value")))) + 
+    geom_hline(yintercept=-log(5*10^-8,base=10)) + 
+    ggtitle(titl) + 
+    geom_text_repel(data=gwas.lab.df,aes(x=POS/10^6,
+                                          y=-log(2*pnorm(-abs(Z),lower.tail=TRUE),base=10),
+                                     label=SNP),size=2.25) + 
+    geom_point(data=gwas.pred.df,aes(x=POS/10^6,
+                                          y=-log(2*pnorm(-abs(Z),lower.tail=TRUE),base=10)),
+                                     fill="purple1",size=2.5,shape=21,alpha=0.5) +     
+    annotate(geom="segment",x=txstart/10^6,xend=txend/10^6,y=0,
+        yend=0,color="red",size=2) + 
+    annotate(geom="segment",x=txstart.ref/10^6,xend=txend.ref/10^6,y=0,
+        yend=0,color="black",size=2) + 
+    theme(plot.title = element_text(face="bold"),
+          axis.title.x=element_blank(),
+          axis.text.x=element_blank(),
+          axis.ticks.x=element_blank(),
+          legend.position = "bottom",
+          legend.key = element_rect(colour = "black"),
+          legend.key.size = unit(0.4, "cm"),
+          legend.text = element_text(size = 6),
+          panel.grid.minor=element_blank());gwas.plt
+  ## MIAMI Plot B (GTEx)
+  gtex.plt <- ggplot(data=gtex.df,aes(x=pos/10^6,y=-log(gtex.p,base=10))) + 
+    geom_point(size=2.5,alpha=0.7,shape=21,color="darkgray",fill="grey") + 
+    theme_bw() + coord_cartesian(xlim=c(start/10^6,end/10^6),
+                                 ylim=c(0,max.y.eqtl),expand=FALSE) + 
+    ylab(expression(-log[10](italic("p-value")))) + 
+    geom_text_repel(data=gtex.lab.df,aes(x=pos/10^6,y=-log(gtex.p,base=10),
+                                     label=SNP),size=2.25) + 
+    geom_point(data=gtex.pred.df,aes(x=pos/10^6,y=-log(gtex.p,base=10)),
+               fill=gtex.pred.df$mycol,size=2.5,shape=21) + 
+    annotate(geom="segment",x=txstart/10^6,xend=txend/10^6,y=0,
+             yend=0,color="red",size=2) + 
+    annotate(geom="segment",x=txstart.ref/10^6,xend=txend.ref/10^6,y=0,
+        yend=0,color="black",size=2) + 
+    scale_y_reverse(breaks=seq(0, max.y.eqtl, 2)) + 
+   xlab("Position on Chromosome " %&% chrom %&% " (Mb)") #+ ggtitle("GTEx") +
+    #xlab(""); gtex.plt
+  miami.plt <- grid.arrange(gwas.plt,gtex.plt,ncol=1)
+  miami.plt
+}
+
+miami.null <- function(mygene,model,manual.max.y.gwas=NA,manual.max.y.eqtl=NA,refgene,gwas.sig.only=FALSE){
+  mod.df <- get_model_snps(mygene,model)
+  if (dim(mod.df)[1] == 0){ # Bug fix 
+    opt <- options(show.error.messages=FALSE) 
+    on.exit(options(opt)) 
+    stop("Problem looking up: " %&% mygene %&% ", " %&% model) 
+  }
+  chrom <- as.integer(get_chrom(mygene))
+  chrom <- as.integer(na.omit(chrom))[1] # Bug fix 
+  window <- get_window(mygene)
+  start <- window[[1]]
+  end <- window[[2]]
+  txint <- get_txint(mygene)
+  txstart <- txint[[1]]
+  txend <- txint[[2]]
+  txint.ref <- get_txint(refgene)
+  txstart.ref <- txint.ref[[1]]
+  txend.ref <- txint.ref[[2]]
+  ## GWAS data frame 
+  gwas.df <- filter(diagram.df,CHR==chrom,POS>=start,POS<=end)
+  gwas.pred.df <- filter(diagram.df,SNP %in% mod.df$rsid)#gwas.pred.df <- filter(gwas.df,SNP %in% mod.df$rsid)
+  t <- gsub("_","-",model)
+  titl <- substitute(paste(t, " : ", italic(g)),list(t=t,g=mygene))
+  max.y = round(max(-log(2*pnorm(-abs(gwas.df$Z),lower.tail=TRUE),base=10)),-1)
+  if (max.y==10){
+    br <- seq(0, max.y, 2)
+  } else if (max.y==20){
+    br <- seq(0,max.y,5)
+  } else{
+    br <- seq(0,max.y,10)
+  }
+  if (!is.na(manual.max.y.gwas)){
+    max.y=manual.max.y.gwas
+    br <- seq(0,max.y,5)
+  }
+  ## eQTL 
+  gtex.path <- tarbell.dir %&% "TW_" %&% model %&% "_" %&% mygene %&% ".gtex.txt.gz"
+  gtex.df <- fread("cat " %&% gtex.path %&% " | zmore")
+  names(gtex.df) <- c("rsid","pos","chrom","model","ensid","gtex.id",
+                      "tss.distance","gtex.p","slope","slope.se")
+  gtex.pred.df <- filter(gtex.df,rsid %in% mod.df$rsid)
+  names(gtex.pred.df)[1] <- "SNP"
+  gtex.pred.df <- inner_join(gwas.pred.df,gtex.pred.df,by="SNP")
+  gtex.pred.df <- process_pred_df(mod.df,gtex.pred.df)
+  max.y.eqtl <- round(max(-log(gtex.pred.df$gtex.p,base=10)),-1)
+  if (max.y.eqtl==0){
+    max.y.eqtl=10
+  }  
+  if (!is.na(manual.max.y.eqtl)){
+    max.y.eqtl=manual.max.y.eqtl
+  }
+  # In case GWAS is missing chrom or pos info but available in GTEx file 
+  for (i in 1:length(gwas.pred.df$SNP)){
+    s <- gwas.pred.df$SNP[i]
+    if (is.na(gwas.pred.df$CHR)[i]){
+      gwas.pred.df$CHR[i] <- filter(gtex.pred.df,SNP==s)$chrom
+    }
+    if (is.na(gwas.pred.df$POS)[i]){
+      gwas.pred.df$POS[i] <- filter(gtex.pred.df,SNP==s)$pos
+    }    
+  }
+  if (gwas.sig.only==TRUE){
+    gwas.lab.df <- filter(gwas.pred.df,P<=(5*(10^-6)))
+    gtex.lab.df <- filter(gtex.pred.df,P<=(5*(10^-6)))
+  } else{
+    gwas.lab.df <- gwas.pred.df
+    gtex.lab.df <- gtex.pred.df    
+  }
+  ## MIAMI PLOT A (GWAS)
+  gwas.plt <- ggplot(data=gwas.df,aes(x=POS/10^6,
+                                      y=-log(2*pnorm(-abs(Z),lower.tail=TRUE),
+                                             base=10))) + 
+    geom_point(size=2.5,alpha=0.7,shape=21,color="darkgray",fill="grey") + 
+    theme_bw() + coord_cartesian(xlim=c(start/10^6,end/10^6),
+                                 ylim=c(0,max.y),expand=FALSE) + 
+    scale_y_continuous(breaks=br) + 
+    ylab(expression(-log[10](italic("p-value")))) + 
+    geom_hline(yintercept=-log(5*10^-8,base=10)) + 
+    ggtitle(titl) + 
+    #geom_text_repel(data=gwas.lab.df,aes(x=POS/10^6,
+                                          #y=-log(2*pnorm(-abs(Z),lower.tail=TRUE),base=10),
+   #                                  label=SNP),size=2.25) + 
+   # geom_point(data=gwas.pred.df,aes(x=POS/10^6,
+                                          #y=-log(2*pnorm(-abs(Z),lower.tail=TRUE),base=10)),
+                                    # fill="purple1",size=2.5,shape=21,alpha=0.5) + 
+    annotate(geom="segment",x=txstart/10^6,xend=txend/10^6,y=0,
+        yend=0,color="red",size=2) + 
+    annotate(geom="segment",x=txstart.ref/10^6,xend=txend.ref/10^6,y=0,
+        yend=0,color="black",size=2) + 
+    theme(plot.title = element_text(face="bold"),
+          axis.title.x=element_blank(),
+          axis.text.x=element_blank(),
+          axis.ticks.x=element_blank(),
+          legend.position = "bottom",
+          legend.key = element_rect(colour = "black"),
+          legend.key.size = unit(0.4, "cm"),
+          legend.text = element_text(size = 6),
+          panel.grid.minor=element_blank());gwas.plt
+  ## MIAMI Plot B (GTEx)
+  gtex.plt <- ggplot(data=gtex.df,aes(x=pos/10^6,y=-log(gtex.p,base=10))) + 
+    geom_point(size=2.5,alpha=0.7,shape=21,color="darkgray",fill="grey") + 
+    theme_bw() + coord_cartesian(xlim=c(start/10^6,end/10^6),
+                                 ylim=c(0,max.y.eqtl),expand=FALSE) + 
+    ylab(expression(-log[10](italic("p-value")))) + 
+    #geom_text_repel(data=gtex.lab.df,aes(x=pos/10^6,y=-log(gtex.p,base=10),
+    #                                 label=SNP),size=2.25) + 
+    #geom_point(data=gtex.pred.df,aes(x=pos/10^6,y=-log(gtex.p,base=10)),
+    #           fill=gtex.pred.df$mycol,size=2.5,shape=21) + 
+    annotate(geom="segment",x=txstart/10^6,xend=txend/10^6,y=0,
+             yend=0,color="red",size=2) + 
+    annotate(geom="segment",x=txstart.ref/10^6,xend=txend.ref/10^6,y=0,
+        yend=0,color="black",size=2) + 
+    scale_y_reverse(breaks=seq(0, max.y.eqtl, 2)) + 
+   xlab("Position on Chromosome " %&% chrom %&% " (Mb)") #+ ggtitle("GTEx") +
+    #xlab(""); gtex.plt
+  miami.plt <- grid.arrange(gwas.plt,gtex.plt,ncol=1)
+  miami.plt
+}
+
+miami.snpsubset <- function(mygene,model,manual.max.y.gwas=NA,manual.max.y.eqtl=NA,refgene,snp.vec){
+  mod.df <- get_model_snps(mygene,model)
+  if (dim(mod.df)[1] == 0){ # Bug fix 
+    opt <- options(show.error.messages=FALSE) 
+    on.exit(options(opt)) 
+    stop("Problem looking up: " %&% mygene %&% ", " %&% model) 
+  }
+  chrom <- as.integer(get_chrom(mygene))
+  chrom <- as.integer(na.omit(chrom))[1] # Bug fix 
+  window <- get_window(mygene)
+  start <- window[[1]]
+  end <- window[[2]]
+  txint <- get_txint(mygene)
+  txstart <- txint[[1]]
+  txend <- txint[[2]]
+  txint.ref <- get_txint(refgene)
+  txstart.ref <- txint.ref[[1]]
+  txend.ref <- txint.ref[[2]]
+  ## GWAS data frame 
+  gwas.df <- filter(diagram.df,CHR==chrom,POS>=start,POS<=end)
+  gwas.pred.df <- filter(diagram.df,SNP %in% mod.df$rsid)#gwas.pred.df <- filter(gwas.df,SNP %in% mod.df$rsid)
+  t <- gsub("_","-",model)
+  titl <- substitute(paste(t, " : ", italic(g)),list(t=t,g=mygene))
+  max.y = round(max(-log(2*pnorm(-abs(gwas.df$Z),lower.tail=TRUE),base=10)),-1)
+  if (max.y==10){
+    br <- seq(0, max.y, 2)
+  } else if (max.y==20){
+    br <- seq(0,max.y,5)
+  } else{
+    br <- seq(0,max.y,10)
+  }
+  if (!is.na(manual.max.y.gwas)){
+    max.y=manual.max.y.gwas
+    br <- seq(0,max.y,5)
+  }
+  ## eQTL 
+  gtex.path <- tarbell.dir %&% "TW_" %&% model %&% "_" %&% mygene %&% ".gtex.txt.gz"
+  gtex.df <- fread("cat " %&% gtex.path %&% " | zmore")
+  names(gtex.df) <- c("rsid","pos","chrom","model","ensid","gtex.id",
+                      "tss.distance","gtex.p","slope","slope.se")
+  gtex.pred.df <- filter(gtex.df,rsid %in% mod.df$rsid)
+  names(gtex.pred.df)[1] <- "SNP"
+  gtex.pred.df <- inner_join(gwas.pred.df,gtex.pred.df,by="SNP")
+  gtex.pred.df <- process_pred_df(mod.df,gtex.pred.df)
+  max.y.eqtl <- round(max(-log(gtex.pred.df$gtex.p,base=10)),-1)
+  if (max.y.eqtl==0){
+    max.y.eqtl=10
+  }  
+  if (!is.na(manual.max.y.eqtl)){
+    max.y.eqtl=manual.max.y.eqtl
+  }
+  # In case GWAS is missing chrom or pos info but available in GTEx file 
+  for (i in 1:length(gwas.pred.df$SNP)){
+    s <- gwas.pred.df$SNP[i]
+    if (is.na(gwas.pred.df$CHR)[i]){
+      gwas.pred.df$CHR[i] <- filter(gtex.pred.df,SNP==s)$chrom
+    }
+    if (is.na(gwas.pred.df$POS)[i]){
+      gwas.pred.df$POS[i] <- filter(gtex.pred.df,SNP==s)$pos
+    }    
+  }
+  ## MIAMI PLOT A (GWAS)
+  gwas.plt <- ggplot(data=gwas.df,aes(x=POS/10^6,
+                                      y=-log(2*pnorm(-abs(Z),lower.tail=TRUE),
+                                             base=10))) + 
+    geom_point(size=2.5,alpha=0.7,shape=21,color="darkgray",fill="grey") + 
+    theme_bw() + coord_cartesian(xlim=c(start/10^6,end/10^6),
+                                 ylim=c(0,max.y),expand=FALSE) + 
+    scale_y_continuous(breaks=br) + 
+    ylab(expression(-log[10](italic("p-value")))) + 
+    geom_hline(yintercept=-log(5*10^-8,base=10)) + 
+    ggtitle(titl) + 
+    geom_text_repel(data=filter(gwas.pred.df,SNP%in%snp.vec),aes(x=POS/10^6,
+                                          y=-log(2*pnorm(-abs(Z),lower.tail=TRUE),base=10),
+                                     label=SNP),size=2.25) + 
+    geom_point(data=gwas.pred.df,aes(x=POS/10^6,
+                                          y=-log(2*pnorm(-abs(Z),lower.tail=TRUE),base=10)),
+                                     fill="purple1",size=2.5,shape=21,alpha=0.5) +     
+    annotate(geom="segment",x=txstart/10^6,xend=txend/10^6,y=0,
+        yend=0,color="red",size=2) + 
+    annotate(geom="segment",x=txstart.ref/10^6,xend=txend.ref/10^6,y=0,
+        yend=0,color="black",size=2) + 
+    theme(plot.title = element_text(face="bold"),
+          axis.title.x=element_blank(),
+          axis.text.x=element_blank(),
+          axis.ticks.x=element_blank(),
+          legend.position = "bottom",
+          legend.key = element_rect(colour = "black"),
+          legend.key.size = unit(0.4, "cm"),
+          legend.text = element_text(size = 6),
+          panel.grid.minor=element_blank());gwas.plt
+  ## MIAMI Plot B (GTEx)
+  gtex.plt <- ggplot(data=gtex.df,aes(x=pos/10^6,y=-log(gtex.p,base=10))) + 
+    geom_point(size=2.5,alpha=0.7,shape=21,color="darkgray",fill="grey") + 
+    theme_bw() + coord_cartesian(xlim=c(start/10^6,end/10^6),
+                                 ylim=c(0,max.y.eqtl),expand=FALSE) + 
+    ylab(expression(-log[10](italic("p-value")))) + 
+    geom_text_repel(data=filter(gtex.pred.df,SNP%in%snp.vec),aes(x=pos/10^6,y=-log(gtex.p,base=10),
+                                     label=SNP),size=2.25) + 
+    geom_point(data=gtex.pred.df,aes(x=pos/10^6,y=-log(gtex.p,base=10)),
+               fill=gtex.pred.df$mycol,size=2.5,shape=21) + 
+    annotate(geom="segment",x=txstart/10^6,xend=txend/10^6,y=0,
+             yend=0,color="red",size=2) + 
+    annotate(geom="segment",x=txstart.ref/10^6,xend=txend.ref/10^6,y=0,
+        yend=0,color="black",size=2) + 
+    scale_y_reverse(breaks=seq(0, max.y.eqtl, 2)) + 
+   xlab("Position on Chromosome " %&% chrom %&% " (Mb)") #+ ggtitle("GTEx") +
+    #xlab(""); gtex.plt
+  miami.plt <- grid.arrange(gwas.plt,gtex.plt,ncol=1)
+  miami.plt
+}
+
+
 
 miami.save <- function(mygene,model,savename){
   mod.df <- get_model_snps(mygene,model)
@@ -445,4 +810,4 @@ ggsave(suppressWarnings(grid.arrange(gwas.plt,gtex.plt,ncol=1)),
 
 
 
-
+ 

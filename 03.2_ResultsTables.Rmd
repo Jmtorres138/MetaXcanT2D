@@ -141,8 +141,9 @@ get_reported_genes <- function(gname){
 }
 
 get_nhgri_ebi_t2d_genes <- function(){
-  server.dir <- "/Volumes/im-lab/nas40t2/jason/projects/ReferenceData/NHGRI/"
-  file.path <- server.dir %&% "nhgri_ebi-trait-genes.txt.gz"
+  #server.dir <- "/Volumes/im-lab/nas40t2/jason/projects/ReferenceData/NHGRI/"
+  #file.path <- server.dir %&% "nhgri_ebi-trait-genes.txt.gz"
+  file.path <- "files_from_tarbell/nhgri_ebi-trait-genes.txt.gz"
   df <- fread("cat " %&% file.path %&% " | zmore")
   df <- filter(df,`DISEASE/TRAIT`=="Type_2_diabetes")
   gene.vec <- c()
@@ -252,6 +253,7 @@ process_core_df <- function(){
 
 ```{r table_function, echo=FALSE}
 
+
 edit_cell <- function(table, row, col, name="core-fg", ...){
   #http://stackoverflow.com/questions/32173928/r-tablegrob-change-format-of-row
   row <- row + 1 # my adjustment 
@@ -266,7 +268,7 @@ edit_cell <- function(table, row, col, name="core-fg", ...){
 }
 
 
-metaXcan_table_plot <- function(core.df){
+metaXcan_table_plot <- function(core.df,colorDIAG=TRUE){
   plot.df <- select(core.df,one_of("chrom","gene","reported.genes","model",
                                   "diag.z.score","diag.p.value","gera.z.score",
                                   "gera.p.value","meta.z.score","meta.p.value"))
@@ -312,15 +314,17 @@ metaXcan_table_plot <- function(core.df){
   #               gp=gpar(fill="pink1",alpha=0.6, 
   #                       col = "pink4", lwd=3))
   # Indicate DIAGRAM Signficant P-values (fill red)
-  vec1 <- (1:dim(plot.df)[1])[core.df$diag.mult.correct]
-  tabgrob <- edit_cell(tabgrob, row=vec1, col=6, "core-bg", 
-                 gp=gpar(fill="firebrick2",alpha=0.5, 
-                         col = "firebrick4", lwd=3))
-  vec2 <- (1:dim(plot.df)[1])[core.df$diag.bonfer]
-  vec2 <- setdiff(vec2,vec1)
-  tabgrob <- edit_cell(tabgrob, row=vec2, col=6, "core-bg", 
-                 gp=gpar(fill="firebrick1",alpha=0.1, 
-                         col = "firebrick4", lwd=3))
+  if (colorDIAG==TRUE){
+    vec1 <- (1:dim(plot.df)[1])[core.df$diag.mult.correct]
+    tabgrob <- edit_cell(tabgrob, row=vec1, col=6, "core-bg", 
+                   gp=gpar(fill="firebrick2",alpha=0.5, 
+                           col = "firebrick4", lwd=3))
+    vec2 <- (1:dim(plot.df)[1])[core.df$diag.bonfer]
+    vec2 <- setdiff(vec2,vec1)
+    tabgrob <- edit_cell(tabgrob, row=vec2, col=6, "core-bg", 
+                   gp=gpar(fill="firebrick1",alpha=0.1, 
+                           col = "firebrick4", lwd=3))
+  }
   # Indicate Meta-analysis Signficant P-values (fill red)
   vec1 <- (1:dim(plot.df)[1])[core.df$meta.mult.correct]
   tabgrob <- edit_cell(tabgrob, row=vec1, col=10, "core-bg", 
@@ -347,26 +351,130 @@ Save all results for genes that are FDR < 5% signficant in at least one tissue
 
 ```{r Save_metaxcan_table_plots, echo=FALSE}
 
+# Genome-wide FDR <= 5% 
+
+manual_entry <- function(mygene,mod){
+  temp.df <- T2Dcore.df
+  sub.df <- filter(temp.df,gene==mygene)[1,]
+  # DIAGRAM lookup 
+  load(rds.dir%&%"diag3/metaXcan.results.Rdata")
+  diag.mult <- 0.05/length(na.omit(as.numeric(as.matrix(select(p.EN.df,-contains("Gene"))))))
+  diag.bon <- 0.05/length(na.omit(as.numeric(as.matrix(select(p.EN.df,one_of(mod))))))
+  diag.z <- as.numeric(filter(z.EN.df,Gene==mygene) %>% select(one_of(mod)))
+  diag.p <- as.numeric(filter(p.EN.df,Gene==mygene) %>% select(one_of(mod)))
+  diag.mult.eval <- diag.p <= diag.mult
+  diag.bon.eval <- diag.p <= diag.bon
+  # GERA lookup 
+  load(rds.dir%&%"gera/metaXcan.results.Rdata")
+  gera.mult <- 0.05/length(na.omit(as.numeric(as.matrix(select(p.EN.df,-contains("Gene"))))))
+  gera.bon <- 0.05/length(na.omit(as.numeric(as.matrix(select(p.EN.df,one_of(mod))))))
+  gera.z <- as.numeric(filter(z.EN.df,Gene==mygene) %>% select(one_of(mod)))
+  gera.p <- as.numeric(filter(p.EN.df,Gene==mygene) %>% select(one_of(mod)))
+  gera.mult.eval <- gera.p <= gera.mult
+  gera.bon.eval <- gera.p <= gera.bon
+  # META lookup 
+  load(rds.dir%&%"diag_gera_meta-analysis/metaXcan.results.Rdata")
+  meta.mult <- 0.05/length(na.omit(as.numeric(as.matrix(select(p.EN.df,-contains("Gene"))))))
+  meta.bon <- 0.05/length(na.omit(as.numeric(as.matrix(select(p.EN.df,one_of(mod))))))
+  meta.z <- as.numeric(filter(z.EN.df,Gene==mygene) %>% select(one_of(mod)))
+  meta.p <- as.numeric(filter(p.EN.df,Gene==mygene) %>% select(one_of(mod)))
+  meta.mult.eval <- meta.p <= meta.mult
+  meta.bon.eval <- meta.p <= meta.bon
+  # Update entry 
+  mymodel <- gsub("TW_","",mod)
+  mymodel <- gsub("_","-",mymodel)
+  sub.df$model <- mymodel
+  sub.df$diag.z.score <- prettyNum(diag.z,digits=2)
+  sub.df$diag.p.value <- prettyNum(diag.p,digits=2)
+  sub.df$diag.bonfer <- diag.bon.eval
+  sub.df$diag.mult.correct <- diag.mult.eval
+  sub.df$gera.z.score <- prettyNum(gera.z,digits=2)
+  sub.df$gera.p.value <- prettyNum(gera.p,digits=2)
+  sub.df$gera.bonfer <- gera.bon.eval
+  sub.df$gera.mult.correct <- gera.mult.eval
+  sub.df$meta.z.score <- prettyNum(meta.z,digits=2)
+  sub.df$meta.p.value <- prettyNum(meta.p,digits=2)
+  sub.df$meta.bonfer <- meta.bon.eval
+  sub.df$meta.mult.correct <- meta.mult.eval
+  sub.df$replicated <- gera.p <= 0.05
+  return(sub.df)
+}
+
+append_GWfdr05 <- function(T2Dcore.df){
+  # Need to manually add these genes to the supplementary table 
+  #[1] "TW_Cells_EBV-transformed_lymphocytes:CCNE2" = T2D.Gene 
+  #[2] "TW_Lung:HCG27" =  T2D.Gene                   
+  #[3] "TW_Muscle_Skeletal:TCP11L1"  = "Unknown"               
+  #[4] "TW_Prostate:AP3S2"= T2D.Gene                        
+  #[5] "TW_Skin_Not_Sun_Exposed_Suprapubic:FAM229B" = "Unknown"  
+  df1 <- manual_entry("CCNE2","TW_Cells_EBV-transformed_lymphocytes")
+  df2 <- manual_entry("HCG27","TW_Lung")
+  df3 <- manual_entry("TCP11L1","TW_Muscle_Skeletal")
+  df4 <- manual_entry("AP3S2","TW_Prostate")
+  df5 <- manual_entry("FAM229B","TW_Skin_Not_Sun_Exposed_Suprapubic")
+  df5$chrom <- 6
+  df5$gene <- "FAM229B"
+  df5$type <- "Unknown"
+  df5$nhgri.gene <- FALSE
+  df5$reported.genes <- "none reported"
+  out.df <- rbind(df1,df2)
+  out.df <- rbind(out.df,df3)
+  out.df <- rbind(out.df,df4)
+  out.df <- rbind(out.df,df5)
+  out.df <- select(out.df,-contains("gera.bonfer")) %>% select(-contains("gera.mult.correct"))
+  out.df <- rbind(out.df,T2Dcore.df)
+  return(out.df)
+}
+
 save_metaXcan_plots <- function(){
+  # Results from GenomeWide-DIAGRAM.Rmd script 
+  fdr.genes <- readRDS(rds.dir%&%"genome.wide.FDR05.associations.RDS")
+  fdr.genes <- gsub("TW_","",fdr.genes)
   T2Dcore.df <- process_core_df()
-  plt1 <- metaXcan_table_plot(T2Dcore.df[1:30,])
-  savename <- fig.dir %&% "ch3_tab_s1_p" %&% 1 %&% ".pdf"
-  ggsave(filename=savename,plot=plt1,height=15,width=11)  
-  plt2 <- metaXcan_table_plot(T2Dcore.df[31:60,])
-  savename <- fig.dir %&% "ch3_tab_s1_p" %&% 2 %&% ".pdf"
-  ggsave(filename=savename,plot=plt2,height=15,width=11)   
-  plt3 <- metaXcan_table_plot(T2Dcore.df[61:90,])
-  savename <- fig.dir %&% "ch3_tab_s1_p" %&% 3 %&% ".pdf"
-  ggsave(filename=savename,plot=plt3,height=15,width=11) 
-  plt4 <- metaXcan_table_plot(T2Dcore.df[91:120,])
-  savename <- fig.dir %&% "ch3_tab_s1_p" %&% 4 %&% ".pdf"
-  ggsave(filename=savename,plot=plt4,height=15,width=11) 
-  plt5 <- metaXcan_table_plot(T2Dcore.df[121:147,])
-  savename <- fig.dir %&% "ch3_tab_s1_p" %&% 5 %&% ".pdf"
-  ggsave(filename=savename,plot=plt5,height=15,width=11) 
-  plt6 <- metaXcan_table_plot(T2Dcore.df[148:153,])
-  savename <- fig.dir %&% "ch3_tab_s1_p" %&% 6 %&% ".pdf"
-  ggsave(filename=savename,plot=plt6,height=15,width=11) 
+  # Adjust data frame entries 
+  T2Dcore.df$reported.genes <- gsub("PRC1,VPS33B","AP3S2,PRC1,VPS33B",T2Dcore.df$reported.genes)
+  T2Dcore.df$reported.genes <- gsub("AP3S2,AP3S2","AP3S2,PRC1,VPS33B",T2Dcore.df$reported.genes)
+  T2Dcore.df$reported.genes <- gsub("MTNR1B,MTNR1B,MTNR1B,\nMTNR1B,MTNR1B,MTNR1B,\nMTNR1B,MTNR1B","MTNR1B",T2Dcore.df$reported.genes)
+  T2Dcore.df$reported.genes <- gsub("CCHCR1,CCHCR1,TCF19,\nTCF19,POU5F1,POU5F1,\nHCG27,HCG27", "CCHCR1,TCF19,POU5F1\nHCG27",T2Dcore.df$reported.genes)
+ T2Dcore.df$reported.genes <- gsub("DPY19L4,DPY19L4,INTS8,\nINTS8,CCNE2,CCNE2,\nTP53INP1,TP53INP1,NDUFAF6,\nNDUFAF6", "DPY19L4,INTS8,CCNE2\nTP53INP1,NDUFAF6",T2Dcore.df$reported.genes)  
+ T2Dcore.df$reported.genes <- gsub("CDC123", "CDC123,CAMK1D",T2Dcore.df$reported.genes)  
+  # filter down to FRD 05 (genome-wide) 
+  T2Dcore.df$pairs <- paste0(T2Dcore.df$model,":",T2Dcore.df$gene)
+  T2Dcore.df <- filter(T2Dcore.df,pairs %in% fdr.genes)
+  T2Dcore.df <- select(T2Dcore.df,-contains("pairs"))
+  T2Dcore.df <- arrange(T2Dcore.df,chrom,reported.genes)
+  # Manually update THADA annotation 
+  index <- match("THADA",T2Dcore.df$gene)
+  T2Dcore.df$reported.genes[index] <- "THADA"
+  # plots
+  T2Dcore.df$model <- gsub("_","-",T2Dcore.df$model)
+  T2Dcore.df <- append_GWfdr05(T2Dcore.df)
+  T2Dcore.df <- arrange(T2Dcore.df,chrom,reported.genes)
+  #saveRDS(T2Dcore.df,file=rds.dir%&%"FDR05.sig.df.RDS")
+  plt1 <- metaXcan_table_plot(T2Dcore.df[1:40,])
+  savename <- fig.dir %&% "fdr05_table_p" %&% 1 %&% ".pdf"
+  ggsave(filename=savename,plot=plt1,height=15,width=12)  
+  plt2 <- metaXcan_table_plot(T2Dcore.df[41:80,])
+  savename <- fig.dir %&% "fdr05_table_p" %&% 2 %&% ".pdf"
+  ggsave(filename=savename,plot=plt2,height=15,width=12)   
+  plt3 <- metaXcan_table_plot(T2Dcore.df[81:120,])
+  savename <- fig.dir %&% "fdr05_table_p" %&% 3 %&% ".pdf"
+  ggsave(filename=savename,plot=plt3,height=15,width=12) 
+  plt4 <- metaXcan_table_plot(T2Dcore.df[121:160,])
+  savename <- fig.dir %&% "fdr05_table_p" %&% 4 %&% ".pdf"
+  ggsave(filename=savename,plot=plt4,height=15,width=12) 
+  plt5 <- metaXcan_table_plot(T2Dcore.df[161:207,])
+  savename <- fig.dir %&% "fdr05_table_p" %&% 5 %&% ".pdf"
+  ggsave(filename=savename,plot=plt5,height=15,width=12) 
+  #t <- select(T2Dcore.df,one_of("gene","type","nhgri.gene","reported.genes"))[!duplicated(T2Dcore.df$gene),]
+  #table(t$type)
+  # t <- T2Dcore.df
+  #t$gera.p.value <- as.numeric(t$gera.p.value)
+  #t <- filter(t,gera.p.value <= 0.05)
+  #length(unique(t$gene))
+  #t <- select(t,one_of("gene","type","nhgri.gene","reported.genes"))
+  #t <- t[!duplicated(t$gene),]
+  #table(t$type)
 }
 
 
@@ -379,8 +487,18 @@ Save all results for genes that are Bonferonni-signficant in at least one tissue
 
 ```{r Save_metaxcan_bonfer_table_plots, echo=FALSE}
 
+
+
+
 save_metaXcan_bonfer_single_plots <- function(){
   T2Dcore.df <- filter(process_core_df(),diag.bonfer==TRUE)
+  T2Dcore.df$reported.genes <- gsub("PRC1,VPS33B","AP3S2,PRC1,VPS33B",T2Dcore.df$reported.genes)
+  T2Dcore.df$reported.genes <- gsub("AP3S2,AP3S2","AP3S2,PRC1,VPS33B",T2Dcore.df$reported.genes)
+  T2Dcore.df$reported.genes <- gsub("MTNR1B,MTNR1B,MTNR1B,\nMTNR1B,MTNR1B,MTNR1B,\nMTNR1B,MTNR1B","MTNR1B",T2Dcore.df$reported.genes)
+  # Manually update THADA annotation 
+  #index <- match("THADA",T2Dcore.df$gene)
+  #T2Dcore.df$reported.genes[index] <- "THADA"
+  # generate plots 
   plt1 <- metaXcan_table_plot(T2Dcore.df[1:30,])
   savename <- fig.dir %&% "bonfer-single-tab_p" %&% 1 %&% ".pdf"
   ggsave(filename=savename,plot=plt1,height=15,width=11)  
@@ -417,15 +535,19 @@ save_metaXcan_bonfer_single_plots()
 
 save_metaXcan_bonfer_plots <- function(){
   T2Dcore.df <- filter(process_core_df(),diag.mult.correct==TRUE)
-  plt1 <- metaXcan_table_plot(T2Dcore.df[1:25,])
-  savename <- fig.dir %&% "bonfer-all-tab_p" %&% 1 %&% ".pdf"
-  ggsave(filename=savename,plot=plt1,height=15,width=11)  
-  plt2 <- metaXcan_table_plot(T2Dcore.df[26:49,])
-  savename <- fig.dir %&% "bonfer-all-tab_p" %&% 2 %&% ".pdf"
-  ggsave(filename=savename,plot=plt2,height=15,width=11)   
-  #plt3 <- metaXcan_table_plot(T2Dcore.df[,])
-  #savename <- fig.dir %&% "bonfer-all-tab_p" %&% 3 %&% ".pdf"
-  #ggsave(filename=savename,plot=plt3,height=15,width=11) 
+  T2Dcore.df$model <- gsub("_","-",T2Dcore.df$model)
+  # Adjust data frame entries 
+  T2Dcore.df$reported.genes <- gsub("PRC1,VPS33B","AP3S2,PRC1,VPS33B",T2Dcore.df$reported.genes)
+  T2Dcore.df$reported.genes <- gsub("AP3S2,AP3S2","AP3S2,PRC1,VPS33B",T2Dcore.df$reported.genes)
+  T2Dcore.df$reported.genes <- gsub("MTNR1B,MTNR1B,MTNR1B,\nMTNR1B,MTNR1B,MTNR1B,\nMTNR1B,MTNR1B","MTNR1B",T2Dcore.df$reported.genes)
+  T2Dcore.df$reported.genes <- gsub("CCHCR1,CCHCR1,TCF19,\nTCF19,POU5F1,POU5F1,\nHCG27,HCG27", "CCHCR1,TCF19,POU5F1\nHCG27",T2Dcore.df$reported.genes)
+  T2Dcore.df$reported.genes <- gsub("DPY19L4,DPY19L4,INTS8,\nINTS8,CCNE2,CCNE2,\nTP53INP1,TP53INP1,NDUFAF6,\nNDUFAF6", "DPY19L4,INTS8,CCNE2\nTP53INP1,NDUFAF6",T2Dcore.df$reported.genes)  
+  T2Dcore.df$reported.genes <- gsub("CDC123", "CDC123,CAMK1D",T2Dcore.df$reported.genes) 
+ # Arrange 
+  T2Dcore.df <- arrange(T2Dcore.df,chrom,reported.genes)
+  plt.manu <- metaXcan_table_plot(T2Dcore.df[1:49,],colorDIAG=FALSE)
+  savename <- fig.dir %&% "bonfer-all-manutab" %&% 1 %&% ".pdf"
+  ggsave(filename=savename,plot=plt.manu,height=15,width=11)  
 }
 
 save_metaXcan_bonfer_plots()

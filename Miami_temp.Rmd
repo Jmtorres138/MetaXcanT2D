@@ -1,0 +1,482 @@
+---
+title: "Miami_temp.Rmd"
+author: "Jason Torres"
+date: "August 29, 2016"
+output:
+  pdf_document:
+    toc: yes
+  html_document:
+    fig_caption: yes
+    highlight: textmate
+    number_sections: yes
+    theme: journal
+    toc: yes
+---
+
+GTEx Version 6
+
+
+```{r setup}
+
+"%&%" <- function(a,b) paste0(a,b)
+
+library("data.table")
+library("dplyr")
+library("ggplot2")
+library("ggrepel")
+library("gridExtra")
+
+root.dir <- "/Users/jtorres/Google Drive/Projects/MetaXcan/MetaXcanT2D/"
+tarbell.dir <- "/Volumes/im-lab/nas40t2/jason/projects/MetaXcan/results/predictors/by_locus/"
+
+ggd.df <- readRDS(root.dir%&%"RDS/ggd.ref.df.RDS")
+
+```
+
+
+
+```{r prepare_gwas}
+
+diag.path <- "/Volumes/im-lab/nas40t2/jason/projects/MetaXcan/meta_files/" %&% "ImpGformat/merged_output_files/impG_DIAGRAM/gwas_file/" %&% "diag3.z.impG_0.8.txt.gz"
+diag.df <- fread("cat " %&% diag.path %&% " | zmore")
+
+#library(BiocInstaller)
+#biocLite("SNPlocs.Hsapiens.dbSNP144.GRCh37")
+library("SNPlocs.Hsapiens.dbSNP144.GRCh37")
+snps144 = SNPlocs.Hsapiens.dbSNP144.GRCh37
+snps.Gpos = snpsById(snps144,ids=diag.df$SNP,ifnotfound="drop") 
+rs.vec <- mcols(snps.Gpos)$RefSNP_id # rs ids 
+chrom.vec <- as.character(seqnames(snps.Gpos)) # chromosomes 
+pos.vec <- start(ranges(snps.Gpos)) # positions 
+snp.df <- as.data.frame(cbind(chrom.vec,rs.vec,pos.vec),stringsAsFactors=FALSE)
+names(snp.df) <- c("CHR","SNP","POS")
+snp.df$chrom <- gsub("ch","",snp.df$chrom)
+snp.df$chrom <- as.integer(snp.df$chrom)
+snp.df$pos <- as.integer(snp.df$pos)
+
+diagram.df <- full_join(diag.df,snp.df,by="SNP")
+diagram.df$POS <- as.integer(diagram.df$POS)
+diagram.df$CHR <- gsub("ch","",diagram.df$CHR)
+diagram.df$CHR <- as.integer(diagram.df$CHR)
+
+
+```
+
+
+```{r get_sig_assoc}
+
+sig.df <- filter(readRDS(root.dir %&% "/RDS/T2Dcore.df.RDS"),
+             diag.mult.correct==TRUE,model!="WholeBloodDGN",
+             model!="CrossTissue")
+sig.df$diag.p.value <- as.numeric(sig.df$diag.p.value)
+sig.df <- arrange(sig.df,diag.p.value)
+
+str(sig.df)
+
+```
+
+```{r windows}
+
+get_chrom <- function(genename){
+  temp.df <- filter(ggd.df,symbol==genename)
+  chrom <- temp.df$chr
+  return(chrom)
+}
+
+get_window <- function(genename){
+  temp.df <- filter(ggd.df,symbol==genename)
+  start <- temp.df$start - 10^6
+  end <- temp.df$end + 10^6
+  return(list(start,end))
+}
+get_txint <- function(genename){
+  temp.df <- filter(ggd.df,symbol==genename)
+  start <- temp.df$start
+  end <- temp.df$end
+  return(list(start,end))
+}
+
+```
+
+
+
+```{r main_function}
+
+beta.dir <- "/Volumes/im-lab/nas40t2/jason/projects/MetaXcan/db_files/gtex/alpha_1/allBetas/"
+
+get_model_snps <- function(mygene,model){
+  print("Looking up models SNPs: " %&% model %&% " ; " %&% mygene)
+  file.path <- beta.dir %&% "TW_" %&% model %&% ".allBetas.txt.gz"
+  temp.df <- fread("cat " %&% file.path %&% " | zmore")
+  ensid <- filter(ggd.df,symbol==mygene)$ensgene
+  temp.df <- filter(temp.df,grepl(ensid, temp.df$gene))
+  return(temp.df)
+}
+
+process_pred_df <- function(pred.df){
+  gtex.A1 <- c()
+  gtex.A2 <- c()
+  for (id in pred.df$gtex.id){
+    vec <- strsplit(id,split="_")[[1]]
+    gtex.A1<- append(gtex.A1,vec[3])
+    gtex.A2<- append(gtex.A2,vec[4])
+  }
+  effect.allele <- pred.df$A2
+  eval.vec <- effect.allele == gtex.A2
+  adj.beta <- pred.df$gtex.beta
+  for (e in 1:length(eval.vec)){
+    if (e ==FALSE){
+      adj.beta[e] <- (-1)*adj.beta[e]
+    }
+  }
+  adj.beta
+  mycol <- c()
+  for (col in adj.beta){
+    if (col < 0){
+      mycol <- append(mycol,"dodgerblue2")
+    } else{
+      mycol <- append(mycol,"green1")
+    }
+  }
+  out.df <- cbind(pred.df,adj.beta,mycol)
+  return(out.df)
+}
+
+
+miami <- function(mygene,model){
+  mod.df <- get_model_snps(mygene,model)
+  chrom <- as.integer(get_chrom(mygene))
+  window <- get_window(mygene)
+  start <- window[[1]]
+  end <- window[[2]]
+  txint <- get_txint(mygene)
+  txstart <- txint[[1]]
+  txend <- txint[[2]]
+  ## GWAS 
+  gwas.df <- filter(diagram.df,CHR==chrom,POS>=start,POS<=end)
+  gwas.pred.df <- filter(gwas.df,SNP %in% mod.df$rsid)
+  gwas.plt <- ggplot(data=gwas.df,aes(x=POS/10^6,
+                                      y=-log(2*pnorm(-abs(Z),lower.tail=TRUE),
+                                             base=10))) + 
+    geom_point(size=2.5,alpha=0.7,shape=21,color="darkgray",fill="grey") + 
+    theme_bw() + coord_cartesian(xlim=c(start/10^6,end/10^6),expand=FALSE) + 
+    #scale_y_continuous(breaks=seq(0,ymax,by=ymax/10)) + 
+    #xlab("Position on Chromosome " %&% chrom %&% " (Mb)") + 
+    ylab(expression(-log[10](italic("p-value")))) + 
+    geom_hline(yintercept=-log(5*10^-8,base=10)) + 
+    ggtitle(model %&% " : " %&% mygene) + 
+    geom_text_repel(data=gwas.pred.df,aes(x=POS/10^6,
+                                          y=-log(2*pnorm(-abs(Z),lower.tail=TRUE),base=10),
+                                     label=SNP),size=2.25) + 
+    geom_point(data=gwas.pred.df,aes(x=POS/10^6,
+                                          y=-log(2*pnorm(-abs(Z),lower.tail=TRUE),base=10)),
+                                     fill="purple1",size=2.5,shape=21,alpha=0.5) +     
+    
+    #geom_point(data=pred.df,aes(x=pos/10^6,y=-log(p,base=10),fill=genemod),
+    #           size=2.5,shape=21) + 
+    theme(plot.title = element_text(face="bold"),
+          axis.title.x=element_blank(),
+          axis.text.x=element_blank(),
+          axis.ticks.x=element_blank(),
+          legend.position = "bottom",
+          legend.key = element_rect(colour = "black"),
+          legend.key.size = unit(0.4, "cm"),
+          legend.text = element_text(size = 6),
+          panel.grid.minor=element_blank());gwas.plt
+  ## eQTL 
+  gtex.path <- tarbell.dir %&% "TW_" %&% model %&% "_" %&% mygene %&% ".gtex.txt.gz"
+  gtex.df <- fread("cat " %&% gtex.path %&% " | zmore")
+  gtex.pred.df <- filter(gtex.df,rsid %in% mod.df$rsid)
+  names(gtex.pred.df)[1] <- "SNP"
+  gtex.pred.df <- inner_join(gwas.pred.df,gtex.pred.df,by="SNP")
+  gtex.pred.df <- process_pred_df(gtex.pred.df)
+  
+  gtex.plt <- ggplot(data=gtex.df,aes(x=pos/10^6,y=-log(gtex.p,base=10))) + 
+    geom_point(size=2.5,alpha=0.7,shape=21,color="darkgray",fill="grey") + 
+    theme_bw() + coord_cartesian(xlim=c(start/10^6,end/10^6),expand=FALSE) + 
+    ylab(expression(-log[10](italic("p-value")))) + 
+    geom_text_repel(data=gtex.pred.df,aes(x=pos/10^6,y=-log(gtex.p,base=10),
+                                     label=SNP),size=2.25) + 
+    geom_point(data=gtex.pred.df,aes(x=pos/10^6,y=-log(gtex.p,base=10)),
+               fill=gtex.pred.df$mycol,size=2.5,shape=21) + 
+    annotate(geom="segment",x=txstart/10^6,xend=txend/10^6,y=0,
+             yend=0,color="black",size=2) + 
+    #theme(plot.title = element_text(face="bold"),
+    #      legend.position = "none",
+    #      panel.grid.minor=element_blank(),
+    #      axis.text.x=element_blank(),
+    #      axis.title.x=element_text(face="bold"),
+    #      axis.ticks.x=element_blank())+
+    #scale_fill_discrete(name="Model") + 
+    scale_y_reverse() + #breaks=seq(0,ymax,by=ymax/10)) + 
+   xlab("Position on Chromosome " %&% chrom %&% " (Mb)") #+ ggtitle("GTEx") +
+    #xlab(""); gtex.plt
+  grid.arrange(gwas.plt,gtex.plt,ncol=1)
+}
+
+```
+
+
+```{r ld_calculations}
+
+#biocLite("ceu1kg")
+library("ceu1kg") # 60 CEU individuals from Phase1 1000K Genomes 
+
+# Phase 1; 1000 Genomes References; 60 CEU
+get_ld_matrix <- function(chrom,mod.snps){
+  pat <- "chr" %&% chrom %&% ".rda"
+  dir.vec <- dir(system.file("parts",package="ceu1kg"))
+  rda.index <- grep(pat,dir.vec)
+  lk = load(dir(system.file("parts", package="ceu1kg"),full=TRUE)[rda.index])  
+  snp.matrix <- get(lk)
+  snp.vec <- attributes(snp.matrix)[[3]][[2]]
+  sub.matrix <- snp.matrix[, (snp.vec %in% mod.snps)]
+  ld.matrix <- ld(sub.matrix,depth=length(mod.snps),stats="R.squared")
+  return(ld.matrix)
+}
+
+get_poly_score <- function(mygene,model){
+  mod.df <- get_model_snps(mygene,model)
+  window <- get_window(mygene)
+  start <- window[[1]]
+  end <- window[[2]]
+  chrom <- as.integer(get_chrom(mygene))
+  ld.mat <- as.matrix(get_ld_matrix(chrom,mod.df$rsid))
+  gwas.df <- filter(diagram.df,CHR==chrom,POS>=start,POS<=end)
+  gwas.pred.df <- filter(gwas.df,SNP %in% mod.df$rsid)
+  gwas.pred.df <- arrange(gwas.pred.df,desc(abs(Z)))
+  top.snp <- gwas.pred.df$SNP[1]
+  top.z <- gwas.pred.df$Z[1]
+  bottom.snps <- setdiff(mod.df$rsid,top.snp)
+  score.vec <- c() 
+  for (b in bottom.snps){
+    b.z <- filter(gwas.pred.df,SNP==b)$Z
+    z.prop <- b.z / top.z
+    val1 <- ld.mat[grep(b,row.names(ld.mat)),
+                   grep(top.snp,row.names(ld.mat))]
+    val2 <- ld.mat[grep(top.snp,row.names(ld.mat)),
+                   grep(b,row.names(ld.mat))]    
+    b.ld <- max(val1,val2)
+    if (!is.na(b.ld) & b.ld == 0){
+      b.ld <- 10^(-6)
+    }
+    poly.score <- z.prop/b.ld#(b.ld^2) # squared to upweight SNPs in low LD with Lead SNP 
+    score.vec <- append(score.vec,poly.score)
+  }
+  max.poly.score <- max(score.vec)
+  return(max.poly.score)
+}
+
+get_poly_df <- function(){
+  gene.vec <- c()
+  mod.vec <- c()
+  poly.vec <- c() 
+  bad.genes <- c("OR2H1","HCG27")
+  for (i in 1:dim(sig.df)[1]){
+    print(i)
+    mygene <- sig.df$gene[i]
+    mymod <- gsub("\\.","-",sig.df$model[i])
+    if (!(mygene %in% bad.genes)){
+      poly <- get_poly_score(mygene,mymod)
+      gene.vec <- append(gene.vec,mygene)
+      mod.vec <- append(mod.vec,mymod)
+      poly.vec <- append(poly.vec,poly)      
+    }
+  }
+  out.df <- as.data.frame(cbind(gene.vec,mod.vec,poly.vec),
+                          stringsAsFactors=FALSE)
+  names(out.df) <- c("gene","model","poly.score")
+  out.df$poly.score <- as.numeric(out.df$poly.score)
+  out.df <- arrange(out.df,desc(poly.score))
+}
+
+test.df <- get_poly_df()
+
+```
+
+
+
+Heuristic for assessing "Polygenicity" 
+
+```{r heuristic} 
+
+server.dir <- "/Volumes/im-lab/nas40t2/jason/projects/ReferenceData/UCSC/"
+gencode.path <- server.dir %&%  "GENCODE.Genes.V19.Basic.annotated.txt.gz"
+gencode.ref.df <- fread("cat " %&% gencode.path %&% " | zmore")
+
+gene2ensid <- function(mygene){
+  genename <- filter(gencode.ref.df,hg19.wgEncodeGencodeAttrsV19.geneName==mygene)$hg19.wgEncodeGencodeAttrsV19.geneId[1]
+  return(genename)
+}
+
+get_ld_matrix <- function(chrom,mod.snps){
+  pat <- "chr" %&% chrom %&% ".rda"
+  dir.vec <- dir(system.file("parts",package="ceu1kg"))
+  rda.index <- grep(pat,dir.vec)
+  lk = load(dir(system.file("parts", package="ceu1kg"),full=TRUE)[rda.index])  
+  snp.matrix <- get(lk)
+  snp.vec <- attributes(snp.matrix)[[3]][[2]]
+  sub.matrix <- snp.matrix[, (snp.vec %in% mod.snps)]
+  ld.matrix <- ld(sub.matrix,depth=length(mod.snps),stats="R.squared")
+  return(ld.matrix)
+}
+
+get_cov_matrix <- function(mygene,model){
+  cov.file <- "/Volumes/im-lab/nas40t2/jason/projects/MetaXcan/" %&% "gtex_covariance/unscaled/1/TW_" %&% model %&% "/covariance.txt.gz"
+  df <- fread("cat " %&% cov.file %&% " | zmore")
+  ensid <- gene2ensid(mygene)
+  df <- na.omit(filter(df,GENE==ensid))
+  snps <- unique(df$RSID1)
+  mat <- matrix(data=NA,nrow=length(snps),ncol=length(snps),
+                dimnames=list(snps,snps))
+  for (i in 1:length(snps)){
+    for (j in 1:length(snps)){
+      snp1 <- snps[i]
+      snp2 <- snps[j]
+      valA <- filter(df,RSID1==snp1,RSID2==snp2)$VALUE
+      valB <- filter(df,RSID2==snp1,RSID1==snp2)$VALUE
+      val<- (na.omit(c(valA,valB)))[1]
+      mat[i,j] <- val
+    }
+  }
+  return(mat)
+}
+
+get_metaxcan_results <- function(mygene,model){
+  file.path <- "/Volumes/im-lab/nas40t2/jason/projects/MetaXcan/results/" %&% 
+    "DIAGRAM3_ImpG_0.80/alpha_1/TW_" %&% model %&% ".zscores.csv"
+  df <- filter(fread(file.path),gene_name==mygene)
+  return(df)
+}
+
+heuristic <- function(mygene,model,gwas.df,ld.cutoff=0.8){
+  # get metaxcan results 
+  print("Loading MetaXcan result file...")
+  mxn.df <- get_metaxcan_results(mygene,model)
+  mxn.z <- mxn.df$zscore
+  sigma_g <- sqrt(mxn.df$VAR_g)
+  # get chromsome 
+  chrom <- as.integer(get_chrom(mygene))
+  # get model snps 
+  mod.df <- get_model_snps(mygene,model)
+  # load covariance matrix 
+  print("Loading covariance matrix...")
+  cov.mat <- get_cov_matrix(mygene,model)
+  snps <- row.names(cov.mat)
+  index <- match(snps,mod.df$rsid)
+  mod.df <- mod.df[index,]
+  beta.vec <- matrix(mod.df$beta,ncol=1)
+  ##sigma.g <- t(beta.vec) %*% cov.mat %*% beta.vec
+  # get ld matrix 
+  ld.mat <- as.matrix(get_ld_matrix(chrom,mod.df$rsid))  
+  # calculate terms for each SNP in the model
+  print("Generating heuristic...")
+  snp.vec <- c() 
+  term.vec <- c() 
+  for (i in 1:dim(mod.df)[1]){
+    snp <- mod.df$rsid[i]
+    w_lg <- mod.df$beta[i]
+    alt_allele <- mod.df$alt[i]
+    gwas_effect_allele <- filter(gwas.df,SNP==snp)$A2
+    if (gwas_effect_allele != alt_allele){
+      w_lg <- (-1)*w_lg
+    }
+    index <- match(snp,snps)
+    sigma_l <- cov.mat[index,index]
+    gwas_z <- filter(gwas.df,SNP==snp)$Z
+    term <- w_lg * (sigma_l / sigma_g) * gwas_z
+    snp.vec <- append(snp.vec,snp)
+    term.vec <- append(term.vec,term)
+  }
+  print("MetaXcan Z: " %&% mxn.z %&% "; Sum of terms: " %&% sum(term.vec))
+  df <- as.data.frame(cbind(snp.vec,term.vec),
+                      stringsAsFactors=FALSE)
+  names(df) <- c("snp","term")
+  df$term <- as.numeric(df$term)
+  # determine sign of metaxcan z score and limit to SNPs with same sign 
+  zsign <- sign(mxn.z)
+  df <- filter(df,sign(term)==zsign)
+  prop <- abs(df$term) / sum(abs(df$term)) # proportion explained by each SNP
+  df <- cbind(df,prop); df <- arrange(df,desc(prop))
+  lead.snp <- df$snp[1]
+  # append pairwise LD with the lead SNP 
+  ld.vec <- c()
+  flag.vec <- c()
+  same <- c()
+  diff <- c() 
+  for (snp in df$snp){
+    val1 <- ld.mat[grep(snp,row.names(ld.mat)),
+                   grep(lead.snp,row.names(ld.mat))]
+    val2 <- ld.mat[grep(lead.snp,row.names(ld.mat)),
+                   grep(snp,row.names(ld.mat))]    
+    ld <- max(val1,val2)
+    if (snp == lead.snp){
+      ld <- 1 
+    }
+    if (ld >= ld.cutoff){
+      flag <- "same"
+      same <- append(same,snp)
+    } else{
+      flag <- "different"
+      diff <- append(diff,snp)
+    }
+    ld.vec <- append(ld.vec,ld)
+    flag.vec <- append(flag.vec,flag)
+  }
+  df <- cbind(df,ld.vec,flag.vec)
+  names(df)[c(dim(df)[2]-1,dim(df)[2])] <- c("ld","flag")
+  df$flag <- as.character(df$flag)
+  heur <- sum(filter(df,flag=="same")$prop)
+  print("Process complete")
+  return(list(heur,same,diff))  
+}
+
+build_heur_df <- function(gwas.df,ld.cutoff){
+  gene.vec <- c()
+  mod.vec <- c()
+  heur.vec <- c() 
+  same.vec <- c()
+  diff.vec <- c()
+  bad.genes <- c("OR2H1","HCG27")
+  for (i in 1:dim(sig.df)[1]){
+    print(i)
+    mygene <- sig.df$gene[i]
+    mymod <- gsub("\\.","-",sig.df$model[i])
+    if (!(mygene %in% bad.genes)){
+      heur.list <- heuristic(mygene,mymod,gwas.df,ld.cutoff)
+      heur <- heur.list[[1]]
+      same.snps <- paste(heur.list[[2]],collapse=",")
+      diff.snps <- paste(heur.list[[3]],collapse=",")
+      gene.vec <- append(gene.vec,mygene)
+      mod.vec <- append(mod.vec,mymod)
+      heur.vec <- append(heur.vec,heur) 
+      same.vec <- append(same.vec,same.snps)
+      diff.vec <- append(diff.vec,diff.snps)
+    }
+  }
+  out.df <- as.data.frame(cbind(gene.vec,mod.vec,heur.vec,
+                                same.vec,diff.vec),
+                          stringsAsFactors=FALSE)
+  names(out.df) <- c("gene","model","heur.score","same.snps","different.snps")
+  out.df$heur.score <- as.numeric(out.df$heur.score)
+  out.df <- arrange(out.df,desc(heur.score))
+}
+
+heur80.df <- build_heur_df(diag.df,ld.cutoff=0.80)
+saveRDS(heur80.df,file=root.dir%&%"RDS/heur.ld80.df.RDS")
+
+heur50.df <- build_heur_df(diag.df,ld.cutoff=0.50)
+saveRDS(heur50.df,file=root.dir%&%"RDS/heur.ld50.df.RDS")
+
+heur30.df <- build_heur_df(diag.df,ld.cutoff=0.30)
+saveRDS(heur30.df,file=root.dir%&%"RDS/heur.ld30.df.RDS")
+
+heur80.df <- readRDS(root.dir%&%"RDS/heur.ld80.df.RDS")
+heur50.df <- readRDS(root.dir%&%"RDS/heur.ld50.df.RDS")
+heur30.df <- readRDS(root.dir%&%"RDS/heur.ld50.df.RDS")
+
+#miami("WFS1","Nerve-Tibial") # good example of possible "monogenic" 
+#miami("HMG20A","Pituitary") # good example of possible "polygenic" 
+
+```
+
