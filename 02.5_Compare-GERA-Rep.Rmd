@@ -1,0 +1,177 @@
+---
+title: "02.5_ComparePlots.Rmd"
+author: "Jason Torres"
+date: "August 4, 2016"
+output:
+  pdf_document:
+    toc: yes
+  html_document:
+    fig_caption: yes
+    highlight: textmate
+    number_sections: yes
+    theme: journal
+    toc: yes
+---
+
+
+Here, I compare Significant associated gene sets from DIAGRAM (FDR 5% and Bonferonni) with significant gene sets from GERA-Replicaton (Pvalue < 0.05) 
+
+
+# Setup
+
+```{r setup, echo=FALSE}
+library("dplyr")
+library("ggplot2")
+library("stargazer")
+library("ggrepel")
+"%&%" <- function(a,b) paste0(a,b) 
+rds.dir <- "intermediate_files/" 
+txt.dir <- "intermediate_files/"
+dir.create(txt.dir)
+tab.dir <- "intermediate_files/"
+fig.dir <- "figures/"
+rep.df <- readRDS(rds.dir %&% "diag/sig.genes.gera-rep.df.RDS")
+```
+
+
+```{r gera_threshold, echo=FALSE}
+
+load(rds.dir%&%"gera/metaXcan.results.Rdata")
+gera.thresh <- 0.05 /length(na.omit(as.numeric(as.matrix(select(p.EN.df,contains("TW_"))))))
+
+```
+
+
+# Z-score Plots of Replicated Gene-models pairs 
+
+Directional comparison of Z-scores 
+
+```{r zscore_plot}
+zscore_plot <- function(alpha){
+  rep.df$type <- as.factor(rep.df$type)
+  rep.df$type <- factor(rep.df$type,levels(rep.df$type)[c(2,1,3)])
+  labels <- c()
+  for (i in 1:length(rep.df$gene)){
+    gname <- rep.df$gene[i]
+    repname <- rep.df$replicated[i]
+    if (repname==TRUE){
+      lname <- gname
+    } else {
+      lname <- ""
+    }
+    labels <- append(labels,lname)
+  }
+  rep.df <- cbind(rep.df,labels)
+  col.vec <- c()
+  for (i in 1:dim(rep.df)[1]){
+    r = rep.df$replicated[i]
+    p <- rep.df$gera.p.value[i]
+    if (r==FALSE){
+      col.vec<-append(col.vec,"grey")
+    } else if(r==TRUE & p <= gera.thresh){
+      col.vec<-append(col.vec,"dodgerblue4")
+    } else{
+      col.vec<-append(col.vec,"dodgerblue1")
+    }
+  }
+  title <- "Directional Comparison between Studies" #\nalpha= " %&% alpha 
+  plt <- ggplot(data=rep.df,aes(x=diag.z.score,y=gera.z.score)) +
+    #geom_point(size=4,shape=21,aes(fill=replicated),show.legend=FALSE) +
+    geom_point(size=2,shape=21,fill=col.vec,show.legend=FALSE) +
+    geom_text_repel(data=filter(rep.df,replicated==TRUE,abs(diag.z.score)>=5,abs(gera.z.score)>=5,gera.p.value<=gera.thresh),aes(label=labels),
+                    show.legend=FALSE,size=3,angle=30) + 
+    geom_hline(yintercept=0) + geom_vline(xintercept=0) + 
+    xlab("Z-score in DIAGRAM Study") + 
+    ylab("Z-score in GERA-T2D Study") + 
+    ggtitle(title) + 
+    #scale_fill_brewer(name="Replicated",palette="Set3") + 
+    scale_fill_manual(name="Replicated")+#,values=c("grey","dodgerblue1")) + 
+    scale_x_continuous(breaks=seq(-10,10,2)) +
+    scale_y_continuous(breaks=seq(-10,10,2))+
+    scale_alpha_manual(values= c(0.5, 1)) + 
+    theme_bw() + 
+    theme(plot.title = element_text(lineheight=.8, face="bold"),
+          axis.title.x = element_text(face="bold"),
+          axis.title.y = element_text(face="bold"))
+  outfile <- fig.dir %&% "GERA-Replication.Zscores.alpha" %&% alpha %&% ".pdf"
+  ggsave(filename = outfile,plot=plt,device="pdf")
+  plt
+}
+```
+
+
+
+```{r zplot_1, echo=FALSE, fig.height=6,fig.width=9}
+zscore_plot(0.5)
+```
+
+# SNP Number Plots 
+
+```{r snp_used_plot, echo=FALSE}
+
+#snp_used_plot <- function(alpha){
+#  rep.df <- intersect_df(alpha)
+#  rep.df$type.x <- as.factor(rep.df$type.x)
+#  rep.df$type.x <- factor(rep.df$type.x,levels(rep.df$type.x)[c(2,1,3)])
+#  title <- "Comparison of Number of Model SNP used between Studies\nalpha= " %&% alpha 
+#  plt <- ggplot(data=rep.df,aes(x=num.used.snps.x,y=num.used.snps.y)) +
+#    geom_point(shape=21,size=4,aes(fill=type.x)) + 
+#    geom_text(aes(label=gene),nudge_y=0.5,size=3,angle=30) + 
+#    #geom_hline(yintercept=0) + geom_vline(xintercept=0) + 
+#    xlab("Number of Predictor SNPs in DIAGRAM3 Study") + 
+#    ylab("Number of Predictor SNPs in GERA-T2D Study") + 
+#    ggtitle(title) + 
+#    scale_fill_brewer(name="Gene Class",palette="Set1") + 
+#    theme_bw() + 
+#    theme(plot.title = element_text(lineheight=.8, face="bold"),
+#          axis.title.x = element_text(face="bold"),
+#          axis.title.y = element_text(face="bold"))
+#  outfile <- fig.dir %&% "GERA-Replication.NumSNPsUsed.alpha" %&% alpha %&% ".pdf"
+#  ggsave(filename = outfile,plot=plt,device="pdf")
+#  plt
+#}
+```
+
+
+```{r splot_1, echo=FALSE, fig.height=6,fig.width=9}
+#snp_used_plot(1)
+```
+
+# Create LaTeX output tables 
+
+```{r table_function, echo=FALSE}
+
+make.latex.table <- function(df,tabname,fname){
+  outpath <- tab.dir %&% fname %&% ".tex"
+  code <- stargazer(df,type="latex",title=tabname,summary=FALSE,
+                    out=outpath,rownames=FALSE)
+}
+```
+
+```{r make_rep_table_latex, echo=FALSE}
+
+write_table <- function(alpha){
+
+  sub.df <- select(rep.df,gene,chrom,type,model,diag.z.score,diag.p.value,
+                   gera.z.score,gera.p.value)
+  sub.df$model <- gsub("TW_","",sub.df$model)
+  names(sub.df) <- c("Gene","Chromosome","Class","Model","DIAGRAM Z-score",
+                     "DIAGRAM p-value","GERA Z-score","GERA p-value")
+  tabname <- "Summary of GERA-replicated genes" #", alpha = " %&% alpha 
+  fname <- "GERA-Replication.table." %&% alpha 
+  make.latex.table(sub.df,tabname,fname)
+  ## save gene list 
+  gene.list <- unique(filter(rep.df,replicated==TRUE)$gene)
+  print("There are " %&% length(gene.list) %&% " unique genes")
+  print("There are " %&% dim(filter(rep.df,replicated==TRUE))[1] %&% " associations that replicate in GERA")
+  outname <- txt.dir %&% "GERA-Replication.genelist.alpha" %&% alpha %&% ".txt"
+  write.table(gene.list,file=outname,quote=FALSE,sep="\t",row.names=FALSE,col.names=FALSE)
+  return(sub.df)
+}
+
+tab.df <- write_table(0.5)
+
+```
+
+
+
