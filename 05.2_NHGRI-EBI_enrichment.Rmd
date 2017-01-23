@@ -1,0 +1,297 @@
+---
+title: "NHGRI-EBI_enrichement.Rmd"
+author: "Jason Torres"
+date: "October 13, 2016"
+output: pdf_document
+---
+
+```{r setup,echo=FALSE}
+
+library("data.table")
+library("dplyr")
+library("stargazer")
+
+"%&%" <- function(a,b) paste0(a,b) 
+
+rds.dir <- "intermediate_files/"
+#rds.version1.dir <- "/Users/jtorres/Google Drive/Projects/MetaXcan/DIAGRAM-T2D/RDS/" 
+
+nhgri.ebi.file <- "input_files/nhgri_ebi-trait-genes.txt.gz"
+
+gwas.df <- fread("cat " %&% nhgri.ebi.file %&% " | zmore")
+trait.vec <- unique(gwas.df$`DISEASE/TRAIT`); length(trait.vec)
+
+tab.dir <- "intermediate_files/"
+
+```
+
+
+#Functions
+
+```{r functions, echo=FALSE}
+
+splitAndJoin <- function(vec){
+  out.vec <- c() 
+  vec <- strsplit(vec,",_")
+  for (i in vec){
+    for (e in i){
+      out.vec <- append(out.vec,e)
+    }
+  }
+  return(unique(out.vec))
+}
+
+nhgri_enrich_test <- function(sig.genes,n=1000,nhgri.genes){
+  load(rds.dir%&%"diag/metaXcan.results.Rdata")
+  gene.vec <- unique(p.EN.df$Gene)
+  obs <- intersect(sig.genes,nhgri.genes)
+  obs.count <- length(obs)
+  print("Overalp is " %&% obs.count)
+  perm.vec <- c()
+  for (i in 1:n){
+    samp <- sample(gene.vec,length(sig.genes),replace=FALSE)
+    count <- length(intersect(samp,nhgri.genes))
+    perm.vec <- append(perm.vec,count)
+  }
+  print("Max permuted value is " %&% max(perm.vec))
+  emp.p <- (sum(perm.vec >= obs.count) + 1)  / (n + 1) # Added 1 to both numerator and denominator 
+  #if (emp.p == 0){
+  #  emp.p = 1/n
+  #}
+  return(emp.p) 
+}
+
+nhgri_enrich_test_outputList <- function(sig.genes,n=1000,nhgri.genes){
+  load(rds.dir%&%"diag/metaXcan.results.Rdata")
+  gene.vec <- unique(p.EN.df$Gene)
+  obs <- intersect(sig.genes,nhgri.genes)
+  obs.count <- length(obs)
+  print("Overalp is " %&% obs.count)
+  perm.vec <- c()
+  for (i in 1:n){
+    samp <- sample(gene.vec,length(sig.genes),replace=FALSE)
+    count <- length(intersect(samp,nhgri.genes))
+    perm.vec <- append(perm.vec,count)
+  }
+  print("Max permuted value is " %&% max(perm.vec))
+  emp.p <- sum(perm.vec >= obs.count) / n
+  if (emp.p == 0){
+    emp.p = 1/n
+  }
+  return(list(obs.count,emp.p,perm.vec)) 
+}
+
+```
+
+
+Determine which GWAS traits have reported genes enriched among FDR <= 0.05 significant MetaXcan results from DIAGRAM trans-ethnic meta-analysis 
+
+```{r enrich_eval, echo=FALSE}
+
+
+
+# less tests, n=100, to triage entire set of 1362 traits in gwas catalogue 
+# and narrow down to a smaller list for more intensive testing 
+
+triage_stage1 <- function(sig.genes){
+  sigtraits.vec <- c() 
+  count = 0 
+  for (trait in trait.vec){
+    count = count + 1 
+    print ("Count: " %&% count)
+    gene.vec <- unique(splitAndJoin(filter(gwas.df,`DISEASE/TRAIT`==trait)$`REPORTED_GENE(S)`))
+    pval <- nhgri_enrich_test(sig.genes,n=100,nhgri.genes=gene.vec)
+    if (pval <= 0.05){
+      print(trait %&% ": " %&% pval)
+      sigtraits.vec <- append(sigtraits.vec,trait)
+    }
+  }
+  return(sigtraits.vec)
+}
+#t1.vec  <- triage_stage1()
+
+triage_stage2 <- function(t1.vec,sig.genes){
+  sigtraits.vec <- c()
+  pval.vec <- c() 
+  count = 0 
+  for (trait in t1.vec){
+    count = count + 1 
+    print ("Count: " %&% count)
+    gene.vec <- unique(splitAndJoin(filter(gwas.df,`DISEASE/TRAIT`==trait)$`REPORTED_GENE(S)`))
+    pval <- nhgri_enrich_test(sig.genes,n=10000,nhgri.genes=gene.vec)
+    if (pval <= (0.05/10)){
+      print(trait %&% ": " %&% pval)
+      #sigtraits.vec <- append(sigtraits.vec,trait)
+    }
+    sigtraits.vec <- append(sigtraits.vec,trait)
+    pval.vec <- append(pval.vec,pval) 
+  }
+  return.df <- as.data.frame(cbind(sigtraits.vec,pval.vec),stringsAsFactors=FALSE)
+  names(return.df) <- c("trait","p")
+  return.df$p <- as.numeric(return.df$p)
+  return(return.df)
+}
+
+
+
+```
+
+
+All FDR05 significant genes
+
+```{r fdr05_all, echo=FALSE}
+
+fdr.df <- readRDS(file=rds.dir%&%"fdr05.processed.df.RDS")
+fdr05.genes <- unique(fdr.df$gene)
+
+#t1.vec  <- triage_stage1(fdr05.genes)
+#sigtraits.df <- triage_stage2(t1.vec,fdr05.genes)
+#sigtraits.df <- arrange(sigtraits.df,p)
+#saveRDS(sigtraits.df,rds.dir %&% "diag/sigtraits.df.RDS")
+#sigtraits.df <- readRDS(rds.dir %&% "diag/sigtraits.df.RDS")
+```
+
+
+All **NOVEL** FDR05 significant genes
+
+```{r fdr05_novel, echo=FALSE}
+
+fdr.df <- readRDS(file=rds.dir%&%"fdr05.processed.df.RDS")
+fdr05.novel.genes <- unique(filter(fdr.df,type!="T2D.Gene")$gene)
+
+t1.vec  <- triage_stage1(fdr05.novel.genes)
+sigtraits.novel.df <- triage_stage2(t1.vec,fdr05.novel.genes)
+sigtraits.novel.df <- arrange(sigtraits.novel.df,p)
+saveRDS(sigtraits.novel.df,rds.dir %&% "diag/sigtraits.novel.df.RDS")
+#sigtraits.novel.df <- readRDS(rds.dir %&% "diag/sigtraits.novel.df.RDS")
+```
+
+
+Known T2D genes among FDR05 significant genes
+
+```{r fdr05_known, echo=FALSE}
+
+fdr.df <- readRDS(file=rds.dir%&%"fdr05.processed.df.RDS")
+fdr05.t2d.genes <- unique(filter(fdr.df,type=="T2D.Gene")$gene)
+
+t1.vec  <- triage_stage1(fdr05.t2d.genes)
+sigtraits.t2d.df <- triage_stage2(t1.vec,fdr05.t2d.genes)
+sigtraits.t2d.df <- arrange(sigtraits.t2d.df,p)
+saveRDS(sigtraits.t2d.df,rds.dir %&% "diag/sigtraits.t2d.df.RDS")
+#sigtraits.t2d.df <- readRDS(rds.dir %&% "diag/sigtraits.t2d.df.RDS")
+```
+
+
+
+
+
+```{r save_latex_table, echo=FALSE}
+
+get_overlapping_trait_genes <- function(mygene.vec,trait){
+ gene.vec <- unique(splitAndJoin(filter(gwas.df,`DISEASE/TRAIT`==trait)$`REPORTED_GENE(S)`))
+ overlap.vec <- unique(intersect(gene.vec,mygene.vec))#; print(overlap.vec)
+ return(overlap.vec)
+}
+
+traits_linked_to_gene <- function(gene){
+  out.vec <- c() 
+  for (trait in trait.vec){
+    gene.vec <- unique(splitAndJoin(filter(gwas.df,`DISEASE/TRAIT`==trait)$`REPORTED_GENE(S)`))
+    if (gene %in% gene.vec){
+      out.vec <- append(out.vec,trait)
+    }
+  }
+  return(out.vec)
+}
+
+make.latex.table <- function(df,tabname,fname){
+  outpath <- tab.dir %&% fname %&% ".tex"
+  code <- stargazer(df,type="latex",title=tabname,summary=FALSE,
+                    out=outpath,rownames=FALSE)
+}
+
+
+#reported.t2d.genes <- unique(c(diagram.reported.genes,nhgri.t2d.genes)) 
+
+make_sigtrait_gene_df <- function(sigtraits.df,sig.genes){
+  loci.df <- readRDS(rds.dir%&%"loci.df.RDS")
+  diagram.reported.genes <- unique(loci.df$reported.gene)
+  nhgri.t2d.genes <-  gene.vec <- unique(splitAndJoin(filter(gwas.df,`DISEASE/TRAIT`=="Type_2_diabetes")$`REPORTED_GENE(S)`))
+  reported.t2d.genes <- unique(c(diagram.reported.genes,nhgri.t2d.genes)) 
+  t.vec <- c()
+  p.vec <- c()
+  g1.vec <- c()
+  g2.vec <- c()
+  for (r in 1:dim(sigtraits.df)[1]){
+    t <- sigtraits.df[r,1]
+    p <- sigtraits.df[r,2]
+    g <- get_overlapping_trait_genes(sig.genes, t)
+    g1 <- intersect(reported.t2d.genes,g); g1 <- paste(g1,collapse=",") 
+    g2 <- setdiff(g,reported.t2d.genes); g2 <- paste(g2,collapse=",")
+    t.vec <- append(t.vec,t); p.vec <- append(p.vec,p)
+    g1.vec <- append(g1.vec,g1); g2.vec <- append(g2.vec,g2)
+  }
+  df <- as.data.frame(cbind(t.vec,p.vec,g1.vec,g2.vec),stringsAsFactors=FALSE)
+  names(df) <- c("t","p","g1","g2")
+  df$p <- as.numeric(df$p)
+  df$t <- gsub("_"," ",df$t)
+  df <- filter(df,p <= 0.05) %>% arrange(p)
+  names(df) <- c("Trait", "P-value", "Reported T2D Genes", "Novel Genes")
+  return(df)
+}
+
+```
+
+
+Write T2D genes (FDR <= 0.05) enrichment results
+
+```{r write_1,echo=FALSE}
+
+write.t2d.df <- make_sigtrait_gene_df(sigtraits.t2d.df,fdr05.t2d.genes)
+make.latex.table(write.t2d.df,"nhgri-ebi enrichment; T2D genes","nhgri.enrichment.t2d")
+
+```
+
+Write Novel genes (FDR <= 0.05) enrichment results
+
+```{r write_2,echo=FALSE}
+
+write.novel.df <- make_sigtrait_gene_df(sigtraits.novel.df,fdr05.novel.genes)
+make.latex.table(write.novel.df,"nhgri-ebi enrichment; Novel genes","nhgri.enrichment.novel")
+
+```
+
+
+# Determine what trait is linked to a particular gene 
+
+```{r process, echo=FALSE}
+
+test <- "TCF7L2"
+
+t1 <- traits_linked_to_gene("UTS2"); print("UTS2"); t1
+t2 <- traits_linked_to_gene("HLA-A");print("HLA-A"); t2
+t3 <- traits_linked_to_gene("ZFAND6");print("ZFAND6"); t3
+t4 <- traits_linked_to_gene("ZNRD1");print("ZNRD1");t4
+t5 <- traits_linked_to_gene("FAH");print("FAH");t5
+
+traits_linked_to_gene("TCF7L2")
+
+```
+
+# Shared etiology 
+
+```{r shared, echo=FALSE}
+
+
+get_overlapping_trait_genes(fdr05.genes, "Breast_cancer")
+get_overlapping_trait_genes(fdr05.genes, "Breast_Cancer_in_BRCA1_mutation_carriers")
+get_overlapping_trait_genes(fdr05.genes, "Glycated_hemoglobin_levels")
+get_overlapping_trait_genes(fdr05.genes, "Proinsulin_levels")
+get_overlapping_trait_genes(fdr05.genes, "LDL_cholesterol") 
+get_overlapping_trait_genes(fdr05.genes, "Cholesterol,_total"); 
+get_overlapping_trait_genes(fdr05.genes, "Triglycerides")
+get_overlapping_trait_genes(fdr05.genes, "Body_mass_index")
+
+
+```
+
