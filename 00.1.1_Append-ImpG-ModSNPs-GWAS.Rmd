@@ -1,7 +1,7 @@
 ---
 title: "Eval-modSNPs-ImpG"
 author: "Jason Torres"
-date: "July 26, 2016"
+date: "July 31, 2017"
 output: pdf_document
 ---
 
@@ -16,9 +16,10 @@ library("ggplot2")
 
 "%&%" <- function(a,b) paste0(a,b)
 
-server.dir <- "/Volumes/im-lab/nas40t2/jason/projects/MetaXcan/"
+server.dir <- "/Users/jtorres/FUSE4/"
+mtxn.dir <- server.dir %&% "projects/MetaXcan/"
 
-beta.dir <- server.dir %&% "db_files/gtex_v6p/alpha_0.5/allBetas/"
+beta.dir <- mtxn.dir %&% "db_files/gtex_v6p/alpha_0.5/allBetas/"
 
 ```
 
@@ -40,7 +41,7 @@ get_all_mod_snps <- function(){
 }
 
 snp.vec <- get_all_mod_snps()
-saveRDS(snp.vec,file="/Volumes/im-lab/nas40t2/jason/projects/MetaXcan/db_files/gtex_v6p/alpha_0.5/allBetas/all_tw_modSNPs.RDS")
+saveRDS(snp.vec,file=mtxn.dir%&%"db_files/gtex_v6p/alpha_0.5/allBetas/all_tw_modSNPs.RDS")
 ```
 
 
@@ -49,8 +50,8 @@ saveRDS(snp.vec,file="/Volumes/im-lab/nas40t2/jason/projects/MetaXcan/db_files/g
 ```{r diagram_setup, echo=FALSE}
 
 # DIAGRAM (trans-ethnic) Build37
-preimp.path <- server.dir %&% "meta_files/diagram/hm2ceu/diag3/diag3.txt.gz" 
-postimp.path <- server.dir %&% "meta_files/" %&% "ImpGformat/merged_output_files/" %&% "impG_DIAGRAM/file/merged.imz.gz"
+preimp.path <- mtxn.dir %&% "meta_files/diagram/hm2ceu/diag3/diag3.txt.gz" 
+postimp.path <- mtxn.dir %&% "meta_files/" %&% "ImpGformat/merged_output_files/" %&% "impG_DIAGRAM/file/merged.imz.gz"
 
 ```
 
@@ -84,7 +85,7 @@ Now, will evaluate the additional set of Model SNPs introduced via imputation (I
 pre.mod.snps <- intersect(diag.df$SNP,snp.vec)
 post.mod.snps <- intersect(diag.post.df$SNP_id,snp.vec)
 addit.mod.snps <- setdiff(post.mod.snps,pre.mod.snps)
-write.table(addit.mod.snps,file = server.dir %&% "meta_files/ImpGformat/merged_output_files/" %&% "impG_DIAGRAM/model-snps-gained_gtexV6p.txt",sep="\t",quote = FALSE, 
+write.table(addit.mod.snps,file = mtxn.dir %&% "meta_files/ImpGformat/merged_output_files/" %&% "impG_DIAGRAM/model-snps-gained_gtexV6p.txt",sep="\t",quote = FALSE, 
             col.names=FALSE,row.names=FALSE)
 
 eval.df <- filter(diag.post.df,SNP_id %in% addit.mod.snps)
@@ -98,26 +99,53 @@ eval.df <- filter(diag.post.df,SNP_id %in% addit.mod.snps)
 
 ```{r quality, echo=FALSE}
 
-file.name <- server.dir %&% "meta_files/ImpGformat/merged_output_files/impG_DIAGRAM/" %&% "model-snps-gained_gtexV6p_DIAGRAM.txt.gz"
+file.name <- mtxn.dir %&% "meta_files/ImpGformat/merged_output_files/impG_DIAGRAM/" %&% "model-snps-gained_gtexV6p_DIAGRAM.txt.gz"
 
 df <- fread("cat " %&% file.name %&% " | zmore")
-filt.df <- df[!duplicated(df),]
+filt.df <- df[!duplicated(df$SNP),]
+dup.df <- df[duplicated(df$SNP),]
+filt.good.df <- filter(filt.df,r2pred >=0.80)
+dup.good.df <- filter(dup.df,r2pred >=0.80)
+
+diff.good <- setdiff(dup.good.df$SNP,filt.good.df$SNP)
 
 hist(filt.df$r2pred)
 # proportion of additional imputed model SNPs meeting / not meeting quality threshold of 0.80 
-sum(filt.df$r2pred >= 0.8) / dim(filt.df)[1]
-sum(filt.df$r2pred <  0.8) / dim(filt.df)[1]
+num.good <- sum(filt.df$r2pred >= 0.8) + length(diff.good) # 39762
+num.good / dim(filt.df)[1]
+(dim(filt.df)[1] - num.good) / dim(filt.df)[1]
 
+all.good.snps <- unique(c(diag.df$SNP,filt.good.df$SNP,dup.good.df$SNP))
+print("There are " %&% length(intersect(all.good.snps,snp.vec)) %&% 
+        " (" %&% round(length(intersect(all.good.snps,snp.vec))/length(snp.vec),3) %&% ")" %&% 
+        " Model SNPs with Imputation Quality R2 >= 0.8 present in DIAGRAM (post-imputation)")
 
 ```
+
+## Evaluate Appended GWAS file 
+
+
+```{r}
+
+#file.name <- mtxn.dir %&% "meta_files/ImpGformat/merged_output_files/impG_DIAGRAM/" %&% "gwas_file/diag3.z.impG_0.8.gtexV6p.txt.gz"
+
+#i.df <- fread("cat " %&% file.name %&% " | zmore") # imputed gwas df 
+#keep <- filter(filt.df,r2pred>=0.80)
+#bad <- filter(filt.df,r2pred<0.80)
+#check <- filter(i.df,SNP %in% bad$SNP)
+#test <- filter(i.df,!(SNP %in% diag.df$SNP))
+#diff <- filter(test,!(SNP %in% keep$SNP))
+
+```
+
 
 
 # GERA 
 
 ```{r gera_setup, echo=FALSE}
 
-preimp.path <- server.dir %&% "meta_files/gera/gera/gera.txt.gz" 
-postimp.path <- server.dir %&% "meta_files/ImpGformat/merged_output_files/impG_GERA/file/merged.imz.gz"
+preimp.path <- mtxn.dir %&% "meta_files/gera/gera/gera.txt.gz" 
+postimp.path <- mtxn.dir %&% "meta_files/ImpGformat/merged_output_files/impG_GERA/file/merged.imz.gz"
 
 ```
 
@@ -150,7 +178,7 @@ Now, will evaluate the additional set of Model SNPs introduced via imputation (I
 pre.mod.snps <- intersect(gera.df$SNP,snp.vec)
 post.mod.snps <- intersect(gera.post.df$SNP_id,snp.vec)
 addit.mod.snps <- setdiff(post.mod.snps,pre.mod.snps)
-write.table(addit.mod.snps,file = server.dir %&% "meta_files/" %&% "ImpGformat/merged_output_files/" %&%  "impG_GERA/model-snps-gained_gtexV6p.txt",sep="\t",quote = FALSE, 
+write.table(addit.mod.snps,file = mtxn.dir %&% "meta_files/" %&% "ImpGformat/merged_output_files/" %&%  "impG_GERA/model-snps-gained_gtexV6p.txt",sep="\t",quote = FALSE, 
             col.names=FALSE,row.names=FALSE)
 
 eval.df <- filter(gera.post.df,SNP_id %in% addit.mod.snps)
@@ -165,16 +193,26 @@ eval.df <- filter(gera.post.df,SNP_id %in% addit.mod.snps)
 
 ```{r quality, echo=FALSE}
 
-file.name <- server.dir %&% "meta_files/ImpGformat/merged_output_files/" %&% "impG_GERA/model-snps-gained_gtexV6p_GERA.txt.gz"
+file.name <- mtxn.dir %&% "meta_files/ImpGformat/merged_output_files/" %&% "impG_GERA/model-snps-gained_gtexV6p_GERA.txt.gz"
 
 df <- fread("cat " %&% file.name %&% " | zmore")
-filt.df <- df[!duplicated(df),]
+filt.df <- df[!duplicated(df$SNP),]
+dup.df <- df[duplicated(df$SNP),]
+filt.good.df <- filter(filt.df,r2pred >=0.80)
+dup.good.df <- filter(dup.df,r2pred >=0.80)
+
+diff.good <- setdiff(dup.good.df$SNP,filt.good.df$SNP)
 
 hist(filt.df$r2pred)
-# proportion of addition imputed model SNPs meeting / not meeting quality threshold of 0.80 
-sum(filt.df$r2pred >= 0.8) / dim(filt.df)[1]
-sum(filt.df$r2pred <  0.8) / dim(filt.df)[1]
+# proportion of additional imputed model SNPs meeting / not meeting quality threshold of 0.80 
+num.good <- sum(filt.df$r2pred >= 0.8) + length(diff.good) # 39762
+num.good / dim(filt.df)[1]
+(dim(filt.df)[1] - num.good) / dim(filt.df)[1]
 
+all.good.snps <- unique(c(diag.df$SNP,filt.good.df$SNP,dup.good.df$SNP))
+print("There are " %&% length(intersect(all.good.snps,snp.vec)) %&% 
+        " (" %&% round(length(intersect(all.good.snps,snp.vec))/length(snp.vec),3) %&% ")" %&% 
+        " Model SNPs with Imputation Quality R2 >= 0.8 present in GERA (post-imputation)")
 
 ```
 
