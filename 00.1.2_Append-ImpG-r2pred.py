@@ -48,7 +48,7 @@ def write_append():
 			sys.stdout.write("File: %d" % count)
 			sys.stdout.flush()
 			sleep(0.25)
-			fin = open(imp_dir+f,'r')
+			fin = gzip.open(imp_dir+f,'rb')
 			head = fin.readline() 
 			for line in fin:
 				l = line.strip().split()
