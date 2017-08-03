@@ -1,151 +1,78 @@
-#!/usr/bin/python -O 
+#!/usr/bin/python -O
 # Jason Matthew Torres
 '''
-Script to combine MetaXcan results into summary table 
-Usage: python JTbuildTables.py meta_name alpha
-Example: python JTbuildTables.py DIAGRAM1 0.5
+Script to combine MetaXcan results with COLOC results
+Prerequisite: Run COLOC on the GWAS dataset
+Usage: python 00.2.2_Append-COLOC-results.py path_to_metaxcan_results path_to_coloc_results path_to_output_directory
 '''
-# libraries 
-import sys,os,gzip 
-import subprocess as sp 
+# libraries
+import sys,os,gzip
+import subprocess as sp
+import re
 
-meta_name = sys.argv[1] 
-alpha = sys.argv[2] 
+#path_to_metaxcan_results = sys.argv[1]
+#path_to_coloc_results = sys.argv[2]
+#path_to_output_directory = sys.argv[3]
+path_to_metaxcan_results = "/group/im-lab/nas40t2/jason/projects/MetaXcan/results/DIAGRAM_ImpG_0.8_gtexV6p/alpha_0.5/"
+path_to_coloc_results = "/group/im-lab/nas40t2/jason/projects/MetaXcan/coloc/coloc/results/coloc_all/"
+path_to_output_directory = "/group/im-lab/nas40t2/jason/projects/MetaXcan/results/DIAGRAM_ImpG_0.8_gtexV6p/alpha_0.5/combine_coloc/"
 
-# globals 
-root_dir = "/group/im-lab/nas40t2/jason/projects/MetaXcan/results/"
-out_dir = root_dir + "tables/GTExV6p/"
-res_dir = root_dir+meta_name+"/alpha_"+str(alpha)+"/"
-file_list = os.listdir(res_dir)
-tiss_list = sorted([x.split(".zscore")[0] for x in file_list])
+# globals
 
-def build_gene_dic():
-    print("Building gene dictionary...")
-    gene_list = []    
-    gene_dic = {}
-    for tiss in tiss_list:
-        fin = open(res_dir+tiss+".zscores.csv",'r')
-        fin.readline()
-        for line in fin:
-            l = line.strip().split(',')
-            ensid,gene,zscore,pval,cvr2,n,ntot = l[0],l[1],l[2],l[4],l[6],l[9],l[11]
-            gene_list.append(gene)
-            try: 
-                gene_dic[gene].append([tiss,zscore,pval,cvr2,n,ntot])
-            except:
-                gene_dic[gene] = [[tiss,zscore,pval,cvr2,n,ntot]]
-        fin.close()
-    gene_list = sorted(list(set(gene_list)))
-    return gene_list, gene_dic 
+file_list1 = os.listdir(path_to_metaxcan_results)
+tiss_list1 = sorted([x.split(".zscores.csv")[0] for x in file_list1 if ".zscores.csv" in x])
+tiss_list1 = [re.sub(r"TW_","",x) for x in tiss_list1]
 
-def write_outfile1(gene_list,gene_dic):
-    print("Writing Zscore result table...")
-    fout = gzip.open(out_dir+meta_name+"."+str(alpha)+".zscore.table.csv.gz",'wb')
-    head_list = ["Gene"] + tiss_list
+file_list2 = os.listdir(path_to_coloc_results)
+tiss_list2 = sorted([x.split(".txt")[0] for x in file_list2 if ".txt" in x])
+tiss_list2 = [re.sub(r"DIAGRAM_T2D_TRANS_ETHNIC_eQTL_","",x) for x in tiss_list2]
+
+
+def build_coloc_dic(coloc_file):
+    dic = {}
+    # gene_id	P_H0	P_H1	P_H2	P_H3	P_H4
+    fin = open(coloc_file,'r')
+    fin.readline()
+    for line in fin:
+        l = line.strip().split()
+        gene,ph0,ph1,ph2,ph3,ph4 = l[0],l[1],l[2],l[3],l[4],l[5]
+        gene = gene.split(".")[0]
+        dic[gene] = [ph0,ph1,ph2,ph3,ph4]
+    fin.close()
+    return dic
+
+def append_coloc(mtxn_file,coloc_dic):
+    file_name = mtxn_file.split("/")[-1]
+    fin = open(mtxn_file,'r')
+    fout = open(path_to_output_directory+file_name,'w')
+    head_list = fin.readline().strip().split()
+    head_list = head_list + ["P.H0","P.H1","P.H2","P.H3","P.H4"]
     fout.write(",".join(head_list)+"\n")
-    for gene in gene_list:
-        write_list = []
-        write_list.append(gene)
-        for tiss in tiss_list:
-            check = False 
-            for l in gene_dic[gene]:
-                if l[0] == tiss:
-                    zscore = l[1]
-                    check = True 
-            if check != True:
-                zscore = "NA"    
-            write_list.append(zscore)
+    count=0
+    for line in fin:
+        count+=1
+        sys.stdout.write("\r%d"%count)
+        sys.stdout.flush()
+        l = line.strip().split(",")
+        gene = l[0]
+        try:
+            write_list = l + coloc_dic[gene]
+        except:
+            write_list = l + ["NA","NA","NA","NA","NA"]
         fout.write(",".join(write_list)+"\n")
-    fout.close() 
-
-def write_outfile2(gene_list,gene_dic):
-    print("Writing Pvalue result table...")
-    fout = gzip.open(out_dir+meta_name+"."+str(alpha)+".pvalue.table.csv.gz",'wb')
-    head_list = ["Gene"] + tiss_list
-    fout.write(",".join(head_list)+"\n")
-    for gene in gene_list:
-        write_list = []
-        write_list.append(gene)
-        for tiss in tiss_list:
-            check = False 
-            for l in gene_dic[gene]:
-                if l[0] == tiss:
-                    pvalue = l[2]
-                    check = True 
-            if check != True:
-                pvalue = "NA"    
-            write_list.append(pvalue)
-        fout.write(",".join(write_list)+"\n")
-    fout.close() 
-
-def write_outfile3(gene_list,gene_dic):
-    print("Writing Predicted R2 result table...")
-    fout = gzip.open(out_dir+meta_name+"."+str(alpha)+".r2.table.csv.gz",'wb')
-    head_list = ["Gene"] + tiss_list
-    fout.write(",".join(head_list)+"\n")
-    for gene in gene_list:
-        write_list = []
-        write_list.append(gene)
-        for tiss in tiss_list:
-            check = False 
-            for l in gene_dic[gene]:
-                if l[0] == tiss:
-                    r2 = l[3]
-                    check = True 
-            if check != True:
-                r2 = "NA"    
-            write_list.append(r2)
-        fout.write(",".join(write_list)+"\n")
-    fout.close() 
-
-def write_outfile4(gene_list,gene_dic):
-    print("Writing number of SNPs used result table...")
-    fout = gzip.open(out_dir+meta_name+"."+str(alpha)+".nsnps.table.csv.gz",'wb')
-    head_list = ["Gene"] + tiss_list
-    fout.write(",".join(head_list)+"\n")
-    for gene in gene_list:
-        write_list = []
-        write_list.append(gene)
-        for tiss in tiss_list:
-            check = False 
-            for l in gene_dic[gene]:
-                if l[0] == tiss:
-                    nsnps = l[4]
-                    check = True 
-            if check != True:
-                nsnps = "NA"    
-            write_list.append(nsnps)
-        fout.write(",".join(write_list)+"\n")
-    fout.close() 
-
-def write_outfile5(gene_list,gene_dic):
-    print("Writing number of SNPs in model result table...")
-    fout = gzip.open(out_dir+meta_name+"."+str(alpha)+".nsnpsmod.table.csv.gz",'wb')
-    head_list = ["Gene"] + tiss_list
-    fout.write(",".join(head_list)+"\n")
-    for gene in gene_list:
-        write_list = []
-        write_list.append(gene)
-        for tiss in tiss_list:
-            check = False 
-            for l in gene_dic[gene]:
-                if l[0] == tiss:
-                    nsnpsmod = l[5]
-                    check = True 
-            if check != True:
-                nsnpsmod = "NA"    
-            write_list.append(nsnpsmod)
-        fout.write(",".join(write_list)+"\n")
-    fout.close() 
+    fin.close()
+    fout.close()
 
 def main():
-    gl, gd = build_gene_dic()
-    write_outfile1(gl,gd)
-    write_outfile2(gl,gd)
-    write_outfile3(gl,gd)
-    write_outfile4(gl,gd)
-    write_outfile5(gl,gd)
-
+    for tiss in tiss_list1:
+        if tiss in tiss_list2:
+            sys.stdout.write("\nBuilding dictionary for tissue: %s\n" % tiss)
+            coloc_file = path_to_coloc_results+"DIAGRAM_T2D_TRANS_ETHNIC_eQTL_"+tiss+".txt"
+            coloc_dic = build_coloc_dic(coloc_file)
+            mtxn_file = path_to_metaxcan_results+"TW_"+tiss+".zscores.csv"
+            sys.stdout.write("\nWriting appended output for tissue: %s\n" % tiss)
+            append_coloc(mtxn_file,coloc_dic)
+        else:
+            sys.stdout.write("\nNo COLOC results available for tissue: %s\n" % tiss)
+    sys.stdout.write("\nProcess Complete\n")
 if (__name__=="__main__"): main()
-
-
