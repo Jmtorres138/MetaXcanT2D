@@ -209,7 +209,7 @@ num.good <- sum(filt.df$r2pred >= 0.8) + length(diff.good) # 39762
 num.good / dim(filt.df)[1]
 (dim(filt.df)[1] - num.good) / dim(filt.df)[1]
 
-all.good.snps <- unique(c(diag.df$SNP,filt.good.df$SNP,dup.good.df$SNP))
+all.good.snps <- unique(c(gera.df$SNP,filt.good.df$SNP,dup.good.df$SNP))
 print("There are " %&% length(intersect(all.good.snps,snp.vec)) %&% 
         " (" %&% round(length(intersect(all.good.snps,snp.vec))/length(snp.vec),3) %&% ")" %&% 
         " Model SNPs with Imputation Quality R2 >= 0.8 present in GERA (post-imputation)")
