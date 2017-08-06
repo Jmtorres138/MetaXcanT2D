@@ -1,0 +1,148 @@
+---
+title: "Implement analytic workflow"
+author: "Jason Torres"
+date: "August 6, 2017"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+# Setup
+```{r}
+
+"%&%" <- function(a,b) paste0(a,b)
+library("dplyr")
+library("data.table")
+
+serv.dir <- "/Users/jtorres/FUSE4/"
+root.dir <- serv.dir %&% "projects/MetaXcan/"
+res.dir <- root.dir %&% "results/tables/GTExV6p/" # DIAGRAM results with COLOC output appended 
+meta.dir <- root.dir %&% "results/meta-analyses/DIAGRAM-GERA_ImpG_0.80_gtexV6p/tables/"
+
+ens.df <- fread("cat " %&% res.dir %&% 
+                "DIAGRAM_ImpG_0.8_gtexV6p.0.5.ensid.table.csv.gz" %&% " | zmore")
+z.df <- fread("cat " %&% res.dir %&% 
+                "DIAGRAM_ImpG_0.8_gtexV6p.0.5.zscore.table.csv.gz" %&% " | zmore")
+r2.df <- fread("cat " %&% res.dir %&% 
+                 "DIAGRAM_ImpG_0.8_gtexV6p.0.5.r2.table.csv.gz" %&% " | zmore")
+ppp.df <- fread("cat " %&% res.dir %&% 
+                 "DIAGRAM_ImpG_0.8_gtexV6p.0.5.ppp.table.csv.gz" %&% " | zmore")
+nsm.df <- fread("cat " %&% res.dir %&% 
+                  "DIAGRAM_ImpG_0.8_gtexV6p.0.5.nsnpsmod.table.csv.gz" %&% " | zmore")
+ns.df <- fread("cat " %&% res.dir %&% 
+                 "DIAGRAM_ImpG_0.8_gtexV6p.0.5.nsnps.table.csv.gz" %&% " | zmore")
+ph3.df <- fread("cat " %&% res.dir %&% 
+                  "DIAGRAM_ImpG_0.8_gtexV6p.0.5.ph3.table.csv.gz" %&% " | zmore")
+ph4.df <- fread("cat " %&% res.dir %&% 
+                  "DIAGRAM_ImpG_0.8_gtexV6p.0.5.ph4.table.csv.gz" %&% " | zmore")
+gera.z.df <- fread("cat " %&% res.dir %&% 
+                     "GERA_ImpG_0.8_gtexV6p.0.5.zscore.table.csv.gz" %&% " | zmore")
+gera.p.df <- fread("cat " %&% res.dir %&% 
+                     "GERA_ImpG_0.8_gtexV6p.0.5.pvalue.table.csv.gz" %&% " | zmore")
+gera.ns.df <- fread("cat " %&% res.dir %&% 
+                      "GERA_ImpG_0.8_gtexV6p.0.5.nsnps.table.csv.gz" %&% " | zmore")
+meta.z.df <- fread("cat " %&% meta.dir %&% 
+                      "DIAGRAM-GERA_ImpG_0.80_gtexV6p.0.5.zscore.table.csv.gz" %&% " | zmore")
+meta.p.df <- fread("cat " %&% meta.dir %&% 
+                      "DIAGRAM-GERA_ImpG_0.80_gtexV6p.0.5.pvalue.table.csv.gz" %&% " | zmore")
+meta.moresig.df <- fread("cat " %&% meta.dir %&% 
+                      "DIAGRAM-GERA_ImpG_0.80_gtexV6p.0.5.moresig.table.csv.gz" %&% " | zmore")
+
+```
+
+
+** Will only consider GTEx tissues/models at this point (Whole Blood DGN will be analyzed seperately) **  
+
+# Step 1 
+
+Perform PrediXcan or S-PrediXcan using all tissues. Use Bonferroni correction for all gene-tissue pairs: keep p< 0.05/ number of gene-tissue pairs tested.
+
+```{r}
+
+pfile <- res.dir %&% "DIAGRAM_ImpG_0.8_gtexV6p.0.5.pvalue.table.csv.gz"
+p.df <- fread("cat " %&% pfile %&% " | zmore")
+gene.vec <- p.df$Gene
+gene.index <- (1:length(colnames(p.df)))[grepl("Gene",colnames(p.df))]
+dgn.index <- (1:length(colnames(p.df)))[grepl("DGN",colnames(p.df))]
+keep.vec <- (1:length(colnames(p.df)))[!((1:length(colnames(p.df))) %in% c(gene.index,dgn.index))]
+p.mat <- as.data.frame(as.data.frame(p.df)[,keep.vec])
+not.missing <- sapply(1:dim(p.mat)[2],function(i){
+  count <- length(na.omit(p.mat[,i]))
+  return(count)
+})
+names(not.missing) <- colnames(p.mat)
+num.pairs <- sum(not.missing)
+bonfer <- 0.05 / num.pairs # 2.561633e-07
+build.sig.df <- function(){
+  sig.df <- c() 
+  for (i in 1:dim(p.mat)[2]){
+    vec <- p.mat[,i]; vec[is.na(vec)] <- 1
+    sig <- vec <= bonfer
+    #tiss.vec <- rep(gsub("TW_","",colnames(p.mat)[i]),sum(sig))
+    tiss.vec <- rep(colnames(p.mat)[i],sum(sig))
+    p.vec <- vec[sig]
+    g.vec <- gene.vec[sig]
+    df <- data.frame(tissue=tiss.vec,gene=g.vec,pvalue=p.vec,
+                     stringsAsFactors = FALSE)
+    sig.df <- rbind(sig.df,df)
+  }
+  return(sig.df)
+}
+
+sig.df <- build.sig.df()
+
+```
+
+
+# Functions for retrieving additional information for significant associations 
+
+
+```{r}
+
+get_vals <- function(sig.df, ref.df,is.string=FALSE){
+  pb <- txtProgressBar(min=0,max=dim(sig.df)[1],initial=0,style=3)
+  vec <- sapply(1:dim(sig.df)[1],function(i){
+    setTxtProgressBar(pb,i)
+    tiss <- sig.df[i,1]; gene <- sig.df[i,2]
+    sub.df <- dplyr::select(ref.df,one_of("Gene",tiss)) %>% filter(Gene==gene) %>% 
+      dplyr::select(one_of(tiss))
+    if (is.string==TRUE){
+      val <- as.character(sub.df)
+    } else{
+      val <- as.numeric(sub.df)
+    }
+    return(val)
+  })
+  return(vec)
+}
+
+append_to_sigdf <- function(sig.df){
+  ensid <- get_vals(sig.df, ens.df, is.string=TRUE)
+  zscore <- get_vals(sig.df, z.df)
+  pred.perf.r2 <- get_vals(sig.df, r2.df) 
+  pred.perf.pvalue <- get_vals(sig.df, ppp.df) 
+  n.snps.model <- get_vals(sig.df, nsm.df) 
+  n.snps <- get_vals(sig.df, ns.df)
+  ph3 <- get_vals(sig.df, ph3.df)
+  ph4 <- get_vals(sig.df, ph4.df)
+  gera.zscore <- get_vals(sig.df, gera.z.df)
+  gera.pvalue <- get_vals(sig.df, gera.p.df)
+  gera.nsnps <- get_vals(sig.df, gera.ns.df)
+  meta.zscore <- get_vals(sig.df, meta.z.df)
+  meta.pvalue <- get_vals(sig.df, meta.p.df)
+  meta.more.sig <- get_vals(sig.df, meta.moresig.df)
+  out.df <- cbind(ensid,sig.df,zscore,pred.perf.r2,pred.perf.pvalue,n.snps.model,n.snps,
+                  ph3,ph4,gera.zscore,gera.pvalue,gera.nsnps,
+                  meta.zscore,meta.pvalue,meta.more.sig)
+  out.df$gene <- gsub("TW_","",out.df$gene)
+  out.df$ensid <- as.character(out.df$ensid)
+  return(out.df)
+}
+
+bonfer.df <- append_to_sigdf(sig.df)
+```
+
+
+
