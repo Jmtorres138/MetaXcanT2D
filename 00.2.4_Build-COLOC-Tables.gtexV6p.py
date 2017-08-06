@@ -11,9 +11,6 @@ import subprocess as sp
 
 # Note: appended results tables are located here:
 #/group/im-lab/nas40t2/jason/projects/MetaXcan/results/DIAGRAM_ImpG_0.8_gtexV6p/alpha_0.5/combine_coloc
-#meta_name = sys.argv[1]
-#alpha = sys.argv[2] # 0.5
-
 
 # globals
 root_dir = "/group/im-lab/nas40t2/jason/projects/MetaXcan/"
@@ -22,8 +19,8 @@ out_dir = root_dir + "results/tables/GTExV6p/"
 file_list = os.listdir(res_dir)
 tiss_list = sorted([x.split(".zscore")[0] for x in file_list if ".zscore" in x])
 output_prefix = out_dir+"DIAGRAM_ImpG_0.8_gtexV6p.0.5"
-#gene,gene_name,zscore,effect_size,pvalue,VAR_g,pred_perf_R2,pred_perf_p,pred_perf_q,n_snps_used,n_snps_in_cov,n_snps_in_model,P.H0,P.H1,P.H2,P.H3
-#,P.H4
+
+
 def build_gene_dic():
     print("Building gene dictionary...")
     gene_list = []
