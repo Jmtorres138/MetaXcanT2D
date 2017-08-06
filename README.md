@@ -12,3 +12,6 @@ python MetaXcanT2D/00.2.3_BuildResultsTables.gtexV6p.py DIAGRAM_ImpG_0.8_gtexV6p
 python MetaXcanT2D/00.2.3_BuildResultsTables.gtexV6p.py GERA_ImpG_0.8_gtexV6p 0.5 
 
 python 00.2.4_Build-COLOC-Tables.gtexV6p.py
+
+
+python 00.3.4_build-meta-results-tables.py DIAGRAM-GERA_ImpG_0.80_gtexV6p 0.5
