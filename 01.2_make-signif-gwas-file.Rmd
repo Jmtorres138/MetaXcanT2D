@@ -1,0 +1,263 @@
+---
+title: "Locus based analysis"
+author: "Jason Torres"
+date: "August 9, 2017"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+
+# Setup 
+
+```{r}
+
+"%&%" <- function(a,b) paste0(a,b)
+library("dplyr")
+library("data.table")
+library("GenomicRanges")
+
+serv.dir <- "/Users/jtorres/FUSE4/"
+root.dir <- serv.dir %&% "projects/MetaXcan/"
+rds.dir <- serv.dir %&% "projects/MetaXcan/MetaXcanT2D/RDS/"
+gwas.dir <- root.dir %&% "meta_files/ImpGformat/merged_output_files/impG_DIAGRAM/gwas_file_v6p/"
+
+```
+
+
+# Build GWAS File
+
+```{r}
+
+library("SNPlocs.Hsapiens.dbSNP144.GRCh37")
+
+gwas.path <- gwas.dir %&% "diag3.z.impG_0.8.gtexV6p.txt.gz"
+
+build_gwas_file <- function(gwas.path){
+  df <- fread("cat " %&% gwas.path %&% " | zmore")
+  snps144 = SNPlocs.Hsapiens.dbSNP144.GRCh37
+  snps.Gpos = snpsById(snps144,ids=df$SNP,ifnotfound="drop") 
+  rs.vec <- mcols(snps.Gpos)$RefSNP_id # rs ids 
+  chrom.vec <- as.character(seqnames(snps.Gpos)) # chromosomes 
+  pos.vec <- start(ranges(snps.Gpos)) # positions 
+  snp.df <- as.data.frame(cbind(chrom.vec,rs.vec,pos.vec),stringsAsFactors=FALSE)
+  names(snp.df) <- c("CHR","SNP","POS")
+  snp.df$CHR <- gsub("ch","",snp.df$CHR)
+  snp.df$CHR <- as.integer(snp.df$CHR)
+  snp.df$POS <- as.integer(snp.df$POS)
+  gwas.df <- full_join(df,snp.df,by="SNP")
+  gwas.df$POS <- as.integer(gwas.df$POS)
+  gwas.df$CHR <- gsub("ch","",gwas.df$CHR)
+  gwas.df$CHR <- as.integer(gwas.df$CHR)
+  gwas.df$P <- 2*pnorm(-abs(gwas.df$Z),lower.tail=TRUE)
+  #gwas.df <- select(gwas.df,one_of("SNP","CHR","POS","P"))
+  #names(gwas.df)[3] <- "BP"  
+  return(gwas.df)
+}
+
+#gwas.df <- build_gwas_file(gwas.path)
+#saveRDS(gwas.df,rds.dir%&%"gwas.df.RDS")
+#gwas.df <- readRDS(rds.dir%&%"gwas.df.RDS")
+
+```
+
+
+# Get Significant GWAS SNPs 
+
+```{r}
+
+get_snp_gr <- function(gwas.df){
+  if (grepl("chr",gwas.df$CHR[1])==FALSE){
+    gwas.df$CHR <- paste0("chr",gwas.df$CHR)
+  }
+  snp.gr <- GRanges(gwas.df$CHR,IRanges(gwas.df$POS, gwas.df$POS))
+  return(snp.gr)
+}
+
+get_sig_gwas_df <- function(gwas.df){
+  num.snps <- dim(gwas.df)[1]
+  bonfer <- 0.05 / num.snps
+  print("Bonferroni significance threshold: " %&% bonfer) # 1.69240876816674e-08
+  sig.gwas.df <- filter(gwas.df,P<=bonfer)
+  return(sig.gwas.df)
+}
+
+sig.gwas.df <- get_sig_gwas_df(gwas.df)
+saveRDS(sig.gwas.df,rds.dir%&%"sig.gwas.df.RDS")
+sig.snp.gr <- get_snp_gr(na.omit(sig.gwas.df))
+
+
+```
+
+
+# Determine Nearest Genes 
+
+
+```{r}
+library("GenomicFeatures")
+library("org.Hs.eg.db")
+library("annotate")
+library("biomaRt")
+mart <- useDataset("hsapiens_gene_ensembl", useMart("ensembl"))
+
+#snp.gr <- sig.snp.gr
+
+get_nearest_ucsc <- function(snp.gr){
+  hg19.known.db <- makeTxDbFromUCSC(genome="hg19", table="knownGene")
+  known.genes<- genes(hg19.known.db)
+  all.geneids <- elementMetadata(known.genes)$gene_id
+  all.genesymbols <- getSYMBOL(all.geneids, data='org.Hs.eg')
+  ref.df <- data.frame(gene.id=all.geneids,symbol=all.genesymbols,
+                       stringsAsFactors = FALSE)
+  elementMetadata(known.genes)$gene_id <- all.genesymbols
+  df <- as.data.frame(known.genes)
+  sub.gr <- GRanges(seqnames=df$seqnames,
+                    IRanges(start=df$start,end=df$end),
+                    strand=rep("*",dim(df)[1]),
+                    name=df$gene_id)
+  nearestGenes <- nearest(snp.gr,sub.gr)
+  res <- df$gene_id[nearestGenes]
+  dist <- distance(snp.gr, known.genes[nearestGenes])
+  ucsc <- res 
+  out.df <- as.data.frame(snp.gr)
+  out.df <- data.frame("CHR"=out.df$seqnames,"POS"=out.df$start,
+                       "ucscGene"=ucsc,"distance.ucscGene"=dist,stringsAsFactors=FALSE)
+  out.df$CHR <- as.character(out.df$CHR)
+  return(out.df)
+}
+
+
+get_nearest_reqseq <- function(snp.gr){
+  hg19.refseq.db <- makeTxDbFromUCSC(genome="hg19", table="refGene")
+  refseq.genes<- genes(hg19.refseq.db)
+  all.geneids <- elementMetadata(refseq.genes)$gene_id
+  all.genesymbols <- getSYMBOL(all.geneids, data='org.Hs.eg')
+  ref.df <- data.frame(gene.id=all.geneids,symbol=all.genesymbols,
+                       stringsAsFactors = FALSE)
+  elementMetadata(refseq.genes)$gene_id <- all.genesymbols
+  df <- as.data.frame(refseq.genes)
+  sub.gr <- GRanges(seqnames=df$seqnames,
+                    IRanges(start=df$start,end=df$end),
+                    strand=rep("*",dim(df)[1]),
+                    name=df$gene_id)
+  nearestGenes <- nearest(snp.gr,sub.gr)
+  res <- df$gene_id[nearestGenes]
+  dist <- distance(snp.gr, refseq.genes[nearestGenes])
+  refGene <- res 
+  out.df <- as.data.frame(snp.gr)
+  out.df <- data.frame("CHR"=out.df$seqnames,"POS"=out.df$start,
+                       "refGene"=refGene,"distance.refGene"=dist,stringsAsFactors=FALSE)
+  out.df$CHR <- as.character(out.df$CHR)
+  return(out.df)
+}
+
+get_nearest_ensid <- function(snp.gr){
+  hg19.ens.db <- makeTxDbFromUCSC(genome="hg19", table="ensGene")
+  ens.genes<- genes(hg19.ens.db)
+  all.geneids <- elementMetadata(ens.genes)$gene_id
+  ref.df <- getBM(filters= "ensembl_gene_id",
+                  attributes= c("ensembl_gene_id","hgnc_symbol"),
+                  values=all.geneids,mart= mart)
+  df <- as.data.frame(ens.genes)
+  sub.gr <- GRanges(seqnames=df$seqnames,
+                    IRanges(start=df$start,end=df$end),
+                    strand=rep("*",dim(df)[1]),
+                    name=df$gene_id)
+  nearestGenes <- nearest(snp.gr,sub.gr)
+  res <- df$gene_id[nearestGenes]
+  dist <- distance(snp.gr, ens.genes[nearestGenes])
+  Ensembl <- res 
+  out.df <- as.data.frame(snp.gr)
+  out.df <- data.frame("CHR"=out.df$seqnames,"POS"=out.df$start,
+                       "Ensembl"=Ensembl,"distance.ensembl"=dist,stringsAsFactors=FALSE)
+  out.df$CHR <- as.character(out.df$CHR)
+  hgnc <- c()
+  pb <- txtProgressBar(min=0,max=dim(out.df)[1],style=3)
+  for (i in 1:dim(out.df)[1]){
+    setTxtProgressBar(pb,i)
+    ensid <- out.df$Ensembl[i]
+    h <- filter(ref.df,ensembl_gene_id==ensid)$hgnc_symbol
+    if (length(h)==0){h=""}
+    hgnc <- append(hgnc,h)
+  }
+  out.df$hgnc <- hgnc
+  return(out.df)
+}
+
+near.ucsc.df <- get_nearest_ucsc(sig.snp.gr)
+near.refseq.df <- get_nearest_reqseq(sig.snp.gr)
+near.ens.df <- get_nearest_ensid(sig.snp.gr)
+
+append_near_info <- function(sig.gwas.df,near.refseq.df,near.ucsc.df,near.ens.df){
+  if (grepl("chr",sig.gwas.df$CHR[1])==FALSE){
+    sig.gwas.df$CHR <- paste0("chr",sig.gwas.df$CHR)
+  }
+  ucscGene <- c(); distance.ucscGene <- c()
+  refGene <- c(); distance.refGene <- c()
+  Ensembl <- c(); distance.ensembl <- c(); hgnc <- c()
+  
+  pb <- txtProgressBar(min=0,max=dim(sig.gwas.df)[1],style=3)
+  for (i in 1:dim(sig.gwas.df)[1]){
+    setTxtProgressBar(pb,i)
+    chrom <- sig.gwas.df$CHR[i]
+    pos <- sig.gwas.df$POS[i]
+    sub.df1 <- filter(near.ucsc.df,CHR==chrom,POS==pos)
+    sub.df2 <- filter(near.refseq.df,CHR==chrom,POS==pos)
+    sub.df3 <- filter(near.ens.df,CHR==chrom,POS==pos)
+
+    if (dim(sub.df1)[1]>0){
+      uc <- sub.df1$ucscGene
+      dist.uc <- sub.df1$distance.ucscGene
+    } else{
+      uc <- NA
+      dist.uc <- NA     
+    }
+    ucscGene <- append(ucscGene,uc)
+    distance.ucscGene <- append(distance.ucscGene,dist.uc)    
+    
+    if (dim(sub.df2)[1]>0){
+      sym <- sub.df2$refGene
+      dist <- sub.df2$distance.refGene
+    } else{
+      sym <- NA
+      dist <- NA     
+    }
+    refGene <- append(refGene,sym)
+    distance.refGene <- append(distance.refGene,dist)
+    
+    if (dim(sub.df3)[1]>0){
+      ens <- sub.df3$Ensembl
+      dist.ens <- sub.df3$distance.ensembl
+      h <- sub.df3$hgnc
+    } else{
+      ens <- NA
+      dist.ens <- NA  
+      h <- NA
+    }
+    Ensembl <- append(Ensembl,ens)
+    distance.ensembl <- append(distance.ensembl,dist.ens)       
+    hgnc <- append(hgnc,h)
+  }
+  out.df <- cbind(sig.gwas.df,
+                  ucscGene,distance.ucscGene,
+                  refGene,distance.refGene,
+                  Ensembl,distance.ensembl,hgnc)
+  out.df$ucscGene <- as.character(out.df$ucscGene)
+  out.df$refGene <- as.character(out.df$refGene)
+  out.df$Ensembl <- as.character(out.df$Ensembl)
+  out.df$hgnc <- as.character(out.df$hgnc)
+
+  return(out.df)
+}
+
+sig.gwas.annot.df <- append_near_info(sig.gwas.df,near.ucsc.df,
+                                      near.refseq.df,near.ens.df)
+saveRDS(sig.gwas.annot.df,rds.dir%&%"sig.gwas.annot.df.RDS")
+write.table(x=sig.gwas.annot.df,file=root.dir%&%"MetaXcanT2D/analyzed_result_files/",
+            sep="\t",quote=FALSE,row.name=FALSE)
+
+```
+
+
