@@ -1,0 +1,74 @@
+---
+title: "Locus based analysis"
+author: "Jason Torres"
+date: "August 13, 2017"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+# Setup 
+
+```{r}
+
+"%&%" <- function(a,b) paste0(a,b)
+library("dplyr")
+library("data.table")
+
+serv.dir <- "/Users/jtorres/FUSE4/"
+root.dir <- serv.dir %&% "projects/MetaXcan/"
+rds.dir <- root.dir %&% "/MetaXcanT2D/RDS/"
+save.dir <- root.dir %&% "MetaXcanT2D/analyzed_result_files/"
+gwas.df <- readRDS(rds.dir %&% "sig.gwas.annot.df.RDS") # dim(gwas.df) is 566 15 
+
+```
+
+# Partition Loci (~ 1 Mb windows) 
+
+```{r}
+library("GenomicRanges")
+
+build_locus_df <- function(){
+  gwas.df$win.start <- gwas.df$POS - 500000
+  gwas.df$win.end <- gwas.df$POS + 500000
+  gwas.df$chrom <- as.integer(gsub("chr","",gwas.df$CHR)) # 2 SNPs are missing 
+  gwas.df <- arrange(gwas.df,chrom,POS)
+  gwas.gr <- GRanges(seqnames=na.omit(gwas.df)$CHR,IRanges(start=na.omit(gwas.df)$win.start,
+                     end=na.omit(gwas.df)$win.end))  
+  ind.gr <- reduce(gwas.gr)
+  chromo.vec <- as.character(seqnames(ind.gr))
+  locus <- c()
+  id.refGene <- c()
+  id.ensembl <- c()
+  id.ucsc <- c() 
+  pb <- txtProgressBar(min=0,max=length(ind.gr),style=3)
+  for (i in 1:length(ind.gr)){
+    setTxtProgressBar(pb,i)
+    rang <- ind.gr[i]
+    #print(seqnames(rang)[])
+    chromo <- chromo.vec[i]
+    start <- start(ranges(ind.gr[i]))
+    end <- end(ranges(ind.gr[i]))
+    sub.df <- filter(gwas.df,CHR==chromo,POS>=start,POS<=end)
+    locus <- append(locus,i)
+    id.refGene <- append(id.refGene,paste0(unique(sub.df$refGene),collapse=","))
+    id.ensembl <- append(id.ensembl,paste0(unique(sub.df$Ensembl),collapse=","))
+    id.ucsc <- append(id.ucsc,paste0(unique(sub.df$hgnc),collapse=","))    
+  }
+  out.df <- data.frame("Locus"=locus,"CHR"=chromo.vec,
+                       "Start"=start(ranges(ind.gr)),"End"=end(ranges(ind.gr)),
+                       "refGene"=id.refGene,"Ensembl"=id.ensembl,"UCSC"=id.ucsc,
+                       stringsAsFactors = FALSE)
+  return(out.df)
+}
+
+locus.df <- build_locus_df()
+write.table(x=locus.df,file=save.dir%&%"locus-table.txt",
+            sep="\t",quote=FALSE,row.names=FALSE)
+saveRDS(object=locus.df,file=rds.dir%&%"locus.df.RDS")
+
+```
+
+
