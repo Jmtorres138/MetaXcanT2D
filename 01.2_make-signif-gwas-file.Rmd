@@ -1,5 +1,5 @@
 ---
-title: "Locus based analysis"
+title: "Prepare significant GWAS result file"
 author: "Jason Torres"
 date: "August 9, 2017"
 output: html_document
