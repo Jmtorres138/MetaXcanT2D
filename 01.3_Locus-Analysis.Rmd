@@ -17,6 +17,7 @@ knitr::opts_chunk$set(echo = TRUE)
 library("dplyr")
 library("data.table")
 
+#serv.dir <- "/group/im-lab/nas40t2/jason/" # server
 serv.dir <- "/Users/jtorres/FUSE4/"
 root.dir <- serv.dir %&% "projects/MetaXcan/"
 rds.dir <- root.dir %&% "/MetaXcanT2D/RDS/"
@@ -24,6 +25,48 @@ save.dir <- root.dir %&% "MetaXcanT2D/analyzed_result_files/"
 gwas.df <- readRDS(rds.dir %&% "sig.gwas.annot.df.RDS") # dim(gwas.df) is 566 15 
 
 ```
+
+Read in results data frames 
+
+```{r}
+res.dir <- root.dir %&% "results/tables/GTExV6p/" # DIAGRAM results with COLOC output appended 
+meta.dir <- root.dir %&% "results/meta-analyses/DIAGRAM-GERA_ImpG_0.80_gtexV6p/tables/"
+
+pfile <- res.dir %&% "DIAGRAM_ImpG_0.8_gtexV6p.0.5.pvalue.table.csv.gz"
+p.df <- fread("cat " %&% pfile %&% " | zmore")
+gene.vec <- p.df$Gene
+
+ens.df <- fread("cat " %&% res.dir %&% 
+                "DIAGRAM_ImpG_0.8_gtexV6p.0.5.ensid.table.csv.gz" %&% " | zmore")
+z.df <- fread("cat " %&% res.dir %&% 
+                "DIAGRAM_ImpG_0.8_gtexV6p.0.5.zscore.table.csv.gz" %&% " | zmore")
+r2.df <- fread("cat " %&% res.dir %&% 
+                 "DIAGRAM_ImpG_0.8_gtexV6p.0.5.r2.table.csv.gz" %&% " | zmore")
+ppp.df <- fread("cat " %&% res.dir %&% 
+                 "DIAGRAM_ImpG_0.8_gtexV6p.0.5.ppp.table.csv.gz" %&% " | zmore")
+nsm.df <- fread("cat " %&% res.dir %&% 
+                  "DIAGRAM_ImpG_0.8_gtexV6p.0.5.nsnpsmod.table.csv.gz" %&% " | zmore")
+ns.df <- fread("cat " %&% res.dir %&% 
+                 "DIAGRAM_ImpG_0.8_gtexV6p.0.5.nsnps.table.csv.gz" %&% " | zmore")
+ph3.df <- fread("cat " %&% res.dir %&% 
+                  "DIAGRAM_ImpG_0.8_gtexV6p.0.5.ph3.table.csv.gz" %&% " | zmore")
+ph4.df <- fread("cat " %&% res.dir %&% 
+                  "DIAGRAM_ImpG_0.8_gtexV6p.0.5.ph4.table.csv.gz" %&% " | zmore")
+gera.z.df <- fread("cat " %&% res.dir %&% 
+                     "GERA_ImpG_0.8_gtexV6p.0.5.zscore.table.csv.gz" %&% " | zmore")
+gera.p.df <- fread("cat " %&% res.dir %&% 
+                     "GERA_ImpG_0.8_gtexV6p.0.5.pvalue.table.csv.gz" %&% " | zmore")
+gera.ns.df <- fread("cat " %&% res.dir %&% 
+                      "GERA_ImpG_0.8_gtexV6p.0.5.nsnps.table.csv.gz" %&% " | zmore")
+meta.z.df <- fread("cat " %&% meta.dir %&% 
+                      "DIAGRAM-GERA_ImpG_0.80_gtexV6p.0.5.zscore.table.csv.gz" %&% " | zmore")
+meta.p.df <- fread("cat " %&% meta.dir %&% 
+                      "DIAGRAM-GERA_ImpG_0.80_gtexV6p.0.5.pvalue.table.csv.gz" %&% " | zmore")
+meta.moresig.df <- fread("cat " %&% meta.dir %&% 
+                      "DIAGRAM-GERA_ImpG_0.80_gtexV6p.0.5.moresig.table.csv.gz" %&% " | zmore")
+
+```
+
 
 # Partition Loci (~ 1 Mb windows) 
 
@@ -71,4 +114,195 @@ saveRDS(object=locus.df,file=rds.dir%&%"locus.df.RDS")
 
 ```
 
+
+# Build Ensemble Ref Data frame 
+
+```{r}
+
+library("GenomicRanges")
+library("GenomicFeatures")
+library("org.Hs.eg.db")
+library("annotate")
+library("Homo.sapiens")
+
+get_tx_gr <- function(ensid){
+  tx.chrom <- tryCatch({(select(Homo.sapiens,key=ensid,keytype="ENSEMBL",
+                                columns="TXCHROM"))$TXCHROM}, 
+                       warning=function(war){return(NA)},
+                       error=function(err){return(NA)})   
+  tx.start <- tryCatch({(select(Homo.sapiens,key=ensid,keytype="ENSEMBL",
+                                columns="TXSTART"))$TXSTART}, 
+                       warning=function(war){return(NA)},
+                       error=function(err){return(NA)})                          
+  tx.end <- tryCatch({(select(Homo.sapiens,key=ensid,keytype="ENSEMBL",
+                                columns="TXEND"))$TXEND}, 
+                       warning=function(war){return(NA)},
+                       error=function(err){return(NA)}) 
+  tx.strand <- tryCatch({(select(Homo.sapiens,key=ensid,keytype="ENSEMBL",
+                                columns="TXSTRAND"))$TXSTRAND}, 
+                       warning=function(war){return(NA)},
+                       error=function(err){return(NA)})   
+  #print(tx.chrom %&% " : " %&% tx.start %&% " : " %&% tx.end %&% " : " %&% tx.strand)
+  tx.gr <- tryCatch({(GRanges(tx.chrom,IRanges(tx.start, tx.end),tx.strand))}, 
+                       warning=function(war){return(NA)},
+                       error=function(err){return(NA)})  
+  return(tx.gr)
+}
+
+build_ensid_ref <- function(){
+  Gene <- ens.df$Gene
+  Ensemble <- c()
+  CHR <- c()
+  Start <- c()
+  End <- c() 
+  pb <- txtProgressBar(min=0,max=length(Gene),style=3)
+  for (i in 1:length(Gene)){
+    setTxtProgressBar(pb,i)
+    ensid <- unique(na.omit(as.character(ens.df[i,2:dim(ens.df)[2]])))[1]
+    Ensemble <- append(Ensemble,ensid)
+    gr <- suppressMessages(get_tx_gr(ensid))
+    if (is.na(gr)){
+      chromo <- NA;tx.start  <- NA; tx.end  <- NA
+    } else{
+      chromo <- unique(as.character(seqnames(gr)))
+      tx.start  <- min(start(ranges(gr)))
+      tx.end  <- max(end(ranges(gr)))      
+    }
+    CHR <- append(CHR,chromo)
+    Start <- append(Start,tx.start)
+    End <- append(End,tx.end)
+  }
+  out.df <- data.frame("Gene"=Gene,"Ensemble"=Ensemble,
+                       "CHR"=CHR,"TX.Start"=Start,"TX.End"=End,
+                       stringsAsFactors=FALSE)
+  return(out.df)
+}
+
+ens.ref.df <- build_ensid_ref()
+write.table(x=locus.df,file=save.dir%&%"Ensemble-reference.txt",
+            sep="\t",quote=FALSE,row.names=FALSE)
+saveRDS(object=locus.df,file=rds.dir%&%"ens.ref.df.RDS")
+
+```
+
+
+
+# Step 1 functions 
+
+
+```{r}
+
+build_p.mat.gtex <- function(){
+  gene.index <- (1:length(colnames(p.df)))[grepl("Gene",colnames(p.df))]
+  dgn.index <- (1:length(colnames(p.df)))[grepl("DGN",colnames(p.df))]
+  keep.vec <- (1:length(colnames(p.df)))[!((1:length(colnames(p.df))) %in% c(gene.index,dgn.index))]
+  p.mat <- as.data.frame(as.data.frame(p.df)[,keep.vec]) 
+  return(p.mat)
+}
+
+build.sig.df <- function(p.mat){
+
+  not.missing <- sapply(1:dim(p.mat)[2],function(i){
+    count <- length(na.omit(p.mat[,i]))
+    return(count)
+  })
+  names(not.missing) <- colnames(p.mat)
+  num.pairs <- sum(not.missing)
+
+  bonfer <- 0.05 / num.pairs # 2.561633e-07  
+  print("Bonferroni threshold: p <= " %&% bonfer)
+  sig.df <- c() 
+  for (i in 1:dim(p.mat)[2]){
+    vec <- p.mat[,i]; vec[is.na(vec)] <- 1
+    sig <- vec <= bonfer
+    #tiss.vec <- rep(gsub("TW_","",colnames(p.mat)[i]),sum(sig))
+    tiss.vec <- rep(colnames(p.mat)[i],sum(sig))
+    p.vec <- vec[sig]
+    g.vec <- gene.vec[sig]
+    df <- data.frame(tissue=tiss.vec,gene=g.vec,pvalue=p.vec,
+                     stringsAsFactors = FALSE)
+    sig.df <- rbind(sig.df,df)
+  }
+  return(sig.df)
+}
+
+get_vals <- function(sig.df, ref.df,is.string=FALSE){
+  pb <- txtProgressBar(min=0,max=dim(sig.df)[1],initial=0,style=3)
+  vec <- sapply(1:dim(sig.df)[1],function(i){
+    setTxtProgressBar(pb,i)
+    tiss <- sig.df[i,1]; gene <- sig.df[i,2]
+    
+    sub.df <- dplyr::select(ref.df,one_of("Gene",tiss)) %>% filter(Gene==gene) %>% 
+      dplyr::select(one_of(tiss))
+    if (is.string==TRUE){
+      val <- as.character(sub.df)
+    } else{
+      val <- as.numeric(sub.df)
+    }
+    return(val)
+  })
+  return(vec)
+}
+
+append_to_sigdf <- function(sig.df){
+  ensid <- get_vals(sig.df, ens.df, is.string=TRUE)
+  zscore <- get_vals(sig.df, z.df)
+  pred.perf.r2 <- get_vals(sig.df, r2.df) 
+  pred.perf.pvalue <- get_vals(sig.df, ppp.df) 
+  n.snps.model <- get_vals(sig.df, nsm.df) 
+  n.snps <- get_vals(sig.df, ns.df)
+  temp.df <- sig.df
+  temp.df$tissue <- gsub("TW_Whole_Blood_DGN","TW_Whole_Blood",temp.df$tissue)
+  ph3 <- get_vals(temp.df, ph3.df)
+  ph4 <- get_vals(temp.df, ph4.df)
+  #if (is.list(ph3)==TRUE & is.vector(ph3)==TRUE){
+  #  ph3 <- rep(NA,length(ensid))
+  #  ph4 <- rep(NA,length(ensid))    
+  #}
+  gera.zscore <- get_vals(sig.df, gera.z.df)
+  gera.pvalue <- get_vals(sig.df, gera.p.df)
+  gera.nsnps <- get_vals(sig.df, gera.ns.df)
+  meta.zscore <- get_vals(sig.df, meta.z.df)
+  meta.pvalue <- get_vals(sig.df, meta.p.df)
+  meta.more.sig <- get_vals(sig.df, meta.moresig.df)
+  out.df <- cbind(ensid,sig.df,zscore,pred.perf.r2,pred.perf.pvalue,n.snps.model,n.snps,
+                  ph3,ph4,gera.zscore,gera.pvalue,gera.nsnps,
+                  meta.zscore,meta.pvalue,meta.more.sig)
+  out.df$tissue <- gsub("TW_","",out.df$tissue)
+  out.df$ensid <- as.character(out.df$ensid)
+  return(out.df)
+}
+
+append_tx_info <- function(sig.df){ # output from append_to_sigdf
+  chrom <- c()
+  tx.start <- c()
+  tx.end <- c()
+  tx.strand <- c()
+  pb <- txtProgressBar(min=0,max=length(sig.df$ensid),initial=0,style=3)
+  for (i in 1:length(sig.df$ensid)){
+    setTxtProgressBar(pb,i)
+    ensid <- sig.df$ensid[i]
+    #print(ensid)
+    tx.gr <- suppressMessages(get_tx_gr(ensid))
+    if (is.na(tx.gr)){
+      chrom <- append(chrom,NA)
+      tx.start <- append(tx.start,NA)
+      tx.end <- append(tx.end,NA)
+      tx.strand <- append(tx.strand,NA)      
+    } else{
+      c <- as.character(seqnames(tx.gr))[1]; chrom <- append(chrom,c)
+      ts <- paste0(unique(start(tx.gr)),collapse=","); tx.start <- append(tx.start,ts)
+      te <- paste0(unique(end(tx.gr)),collapse=","); tx.end <- append(tx.end,te)
+      tst <- paste0(unique(strand(tx.gr)),collapse=","); tx.strand <- append(tx.strand,tst)      
+    }
+  }
+  out.df <- cbind(chrom,tx.start,tx.end,tx.strand,sig.df)
+  out.df$chrom <- as.character(out.df$chrom)
+  out.df$tx.start <- as.character(out.df$tx.start)
+  out.df$tx.end <- as.character(out.df$tx.end)
+  out.df$tx.strand <- as.character(out.df$tx.strand)
+  return(out.df)
+}
+
+```
 
