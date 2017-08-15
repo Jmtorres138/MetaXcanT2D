@@ -124,6 +124,10 @@ library("GenomicFeatures")
 library("org.Hs.eg.db")
 library("annotate")
 library("Homo.sapiens")
+install.packages("devtools")
+devtools::install_github("stephenturner/annotables")
+library("annotables")
+
 
 get_tx_gr <- function(ensid){
   tx.chrom <- tryCatch({(select(Homo.sapiens,key=ensid,keytype="ENSEMBL",
@@ -158,16 +162,22 @@ build_ensid_ref <- function(){
   pb <- txtProgressBar(min=0,max=length(Gene),style=3)
   for (i in 1:length(Gene)){
     setTxtProgressBar(pb,i)
-    ensid <- unique(na.omit(as.character(ens.df[i,2:dim(ens.df)[2]])))[1]
-    Ensemble <- append(Ensemble,ensid)
-    gr <- suppressMessages(get_tx_gr(ensid))
-    if (is.na(gr)){
-      chromo <- NA;tx.start  <- NA; tx.end  <- NA
+    sub.df <- filter(grch37,symbol==Gene[i])
+    if (dim(sub.df)[1]>0){
+      #if(dim(sub.df)[1]>1){
+      #  print(sub.df)
+      #}
+      ensid <- sub.df[1,]$ensgene 
+      chromo <- sub.df[1,]$chr
+      tx.start <- sub.df[1,]$start
+      tx.end <- sub.df[1,]$end      
     } else{
-      chromo <- unique(as.character(seqnames(gr)))
-      tx.start  <- min(start(ranges(gr)))
-      tx.end  <- max(end(ranges(gr)))      
+      ensid <- NA 
+      chromo <- NA
+      tx.start <- NA
+      tx.end <- NA    
     }
+    Ensemble <- append(Ensemble,ensid)
     CHR <- append(CHR,chromo)
     Start <- append(Start,tx.start)
     End <- append(End,tx.end)
@@ -175,13 +185,15 @@ build_ensid_ref <- function(){
   out.df <- data.frame("Gene"=Gene,"Ensemble"=Ensemble,
                        "CHR"=CHR,"TX.Start"=Start,"TX.End"=End,
                        stringsAsFactors=FALSE)
+  out.df$CHR <- as.integer(out.df$CHR)
   return(out.df)
 }
 
 ens.ref.df <- build_ensid_ref()
-write.table(x=locus.df,file=save.dir%&%"Ensemble-reference.txt",
+
+write.table(x=ens.ref.df,file=save.dir%&%"Ensemble-reference.txt",
             sep="\t",quote=FALSE,row.names=FALSE)
-saveRDS(object=locus.df,file=rds.dir%&%"ens.ref.df.RDS")
+saveRDS(object=ens.ref.df,file=rds.dir%&%"ens.ref.df.RDS")
 
 ```
 
@@ -192,11 +204,25 @@ saveRDS(object=locus.df,file=rds.dir%&%"ens.ref.df.RDS")
 
 ```{r}
 
-build_p.mat.gtex <- function(){
-  gene.index <- (1:length(colnames(p.df)))[grepl("Gene",colnames(p.df))]
-  dgn.index <- (1:length(colnames(p.df)))[grepl("DGN",colnames(p.df))]
-  keep.vec <- (1:length(colnames(p.df)))[!((1:length(colnames(p.df))) %in% c(gene.index,dgn.index))]
-  p.mat <- as.data.frame(as.data.frame(p.df)[,keep.vec]) 
+for (i in 1:dim(locus.df)[1]){
+  chrom <- as.integer(gsub("chr","",locus.df$CHR[i]))
+  win.start <- locus.df$Start[i]
+  win.end <- locus.df$End[i]
+  k <- filter(ens.ref.df,CHR==chrom,TX.Start>=win.start,TX.End<=win.end)
+  print(c(locus.df$refGene[i],dim(k)[1]))
+}
+
+
+build_p.mat.gtex <- function(chrom,win.start,win.end){
+  ensgenes <- strsplit(filter(locus.df,CHR==chrom,Start>=win.start,End<=win.end)$Ensembl,",")[[1]]
+  keep.genes <- filter(grch37,ensgene%in%ensgenes)$symbol
+  keep.genes <- append(keep.genes,filter(ens.ref.df,CHR==(as.integer(gsub("chr","",chrom)))
+                       ,TX.Start>=win.start,TX.End<=win.end)$Gene)
+  psub.df <- filter(p.df,Gene %in% keep.genes)
+  gene.index <- (1:length(colnames(psub.df)))[grepl("Gene",colnames(psub.df))]
+  dgn.index <- (1:length(colnames(psub.df)))[grepl("DGN",colnames(psub.df))]
+  keep.vec <- (1:length(colnames(psub.df)))[!((1:length(colnames(psub.df))) %in% c(gene.index,dgn.index))]
+  p.mat <- as.data.frame(as.data.frame(psub.df)[,keep.vec]) 
   return(p.mat)
 }
 
