@@ -71,11 +71,12 @@ meta.moresig.df <- fread("cat " %&% meta.dir %&%
 # Partition Loci (~ 1 Mb windows) 
 
 ```{r}
+
 library("GenomicRanges")
 
 build_locus_df <- function(){
-  gwas.df$win.start <- gwas.df$POS - 500000
-  gwas.df$win.end <- gwas.df$POS + 500000
+  gwas.df$win.start <- gwas.df$POS - 1000000
+  gwas.df$win.end <- gwas.df$POS + 1000000
   gwas.df$chrom <- as.integer(gsub("chr","",gwas.df$CHR)) # 2 SNPs are missing 
   gwas.df <- arrange(gwas.df,chrom,POS)
   gwas.gr <- GRanges(seqnames=na.omit(gwas.df)$CHR,IRanges(start=na.omit(gwas.df)$win.start,
@@ -124,8 +125,8 @@ library("GenomicFeatures")
 library("org.Hs.eg.db")
 library("annotate")
 library("Homo.sapiens")
-install.packages("devtools")
-devtools::install_github("stephenturner/annotables")
+#install.packages("devtools")
+#devtools::install_github("stephenturner/annotables")
 library("annotables")
 
 
@@ -195,6 +196,16 @@ write.table(x=ens.ref.df,file=save.dir%&%"Ensemble-reference.txt",
             sep="\t",quote=FALSE,row.names=FALSE)
 saveRDS(object=ens.ref.df,file=rds.dir%&%"ens.ref.df.RDS")
 
+missing.info.genes <- ens.ref.df[is.na(ens.ref.df$Ensemble),]$Gene # possibly outdated gene symbols (i.e. KLHDC5)
+
+#vec <- c()
+#for (i in 1:dim(ens.df)[1]){
+#  v <- unique(na.omit(as.character(as.data.frame(ens.df)[i,2:46])))
+#  vec <- append(vec,v)
+#  
+#}
+
+
 ```
 
 
@@ -204,14 +215,8 @@ saveRDS(object=ens.ref.df,file=rds.dir%&%"ens.ref.df.RDS")
 
 ```{r}
 
-for (i in 1:dim(locus.df)[1]){
-  chrom <- as.integer(gsub("chr","",locus.df$CHR[i]))
-  win.start <- locus.df$Start[i]
-  win.end <- locus.df$End[i]
-  k <- filter(ens.ref.df,CHR==chrom,TX.Start>=win.start,TX.End<=win.end)
-  print(c(locus.df$refGene[i],dim(k)[1]))
-}
-
+  #k <- filter(ens.ref.df,CHR==chrom,TX.Start>=win.start,TX.End<=win.end)
+  #print(c(locus.df$refGene[i],dim(k)[1]))
 
 build_p.mat.gtex <- function(chrom,win.start,win.end){
   ensgenes <- strsplit(filter(locus.df,CHR==chrom,Start>=win.start,End<=win.end)$Ensembl,",")[[1]]
@@ -222,7 +227,8 @@ build_p.mat.gtex <- function(chrom,win.start,win.end){
   gene.index <- (1:length(colnames(psub.df)))[grepl("Gene",colnames(psub.df))]
   dgn.index <- (1:length(colnames(psub.df)))[grepl("DGN",colnames(psub.df))]
   keep.vec <- (1:length(colnames(psub.df)))[!((1:length(colnames(psub.df))) %in% c(gene.index,dgn.index))]
-  p.mat <- as.data.frame(as.data.frame(psub.df)[,keep.vec]) 
+  p.mat <- as.data.frame(as.data.frame(psub.df)[,keep.vec])
+  row.names(p.mat) <- psub.df$Gene
   return(p.mat)
 }
 
@@ -235,8 +241,8 @@ build.sig.df <- function(p.mat){
   names(not.missing) <- colnames(p.mat)
   num.pairs <- sum(not.missing)
 
-  bonfer <- 0.05 / num.pairs # 2.561633e-07  
-  print("Bonferroni threshold: p <= " %&% bonfer)
+  bonfer <- 0.05 / num.pairs 
+  #print("Bonferroni threshold: p <= " %&% bonfer)
   sig.df <- c() 
   for (i in 1:dim(p.mat)[2]){
     vec <- p.mat[,i]; vec[is.na(vec)] <- 1
@@ -244,7 +250,7 @@ build.sig.df <- function(p.mat){
     #tiss.vec <- rep(gsub("TW_","",colnames(p.mat)[i]),sum(sig))
     tiss.vec <- rep(colnames(p.mat)[i],sum(sig))
     p.vec <- vec[sig]
-    g.vec <- gene.vec[sig]
+    g.vec <- row.names(p.mat)[sig]#gene.vec[sig]
     df <- data.frame(tissue=tiss.vec,gene=g.vec,pvalue=p.vec,
                      stringsAsFactors = FALSE)
     sig.df <- rbind(sig.df,df)
@@ -330,5 +336,114 @@ append_tx_info <- function(sig.df){ # output from append_to_sigdf
   return(out.df)
 }
 
+
+build_siggene_results <- function(){
+  out.df <- c()
+  #pb <- txtProgressBar(min=0,max=dim(locus.df)[1],style = 3)
+  for (i in 1:dim(locus.df)[1]){
+    #setTxtProgressBar(pb,i)
+    print(i)
+    chrom <- locus.df$CHR[i] #as.integer(gsub("chr","",locus.df$CHR[i]))
+    win.start <- locus.df$Start[i]
+    win.end <- locus.df$End[i]
+    p.mat <- build_p.mat.gtex(chrom,win.start,win.end)
+    sig.df <- build.sig.df(p.mat)
+    if (dim(sig.df)[1] > 0){
+      #print(locus.df$UCSC[i])
+      sig.df <- append_to_sigdf(sig.df)
+      sig.df <- append_tx_info(sig.df) 
+      sig.df <- cbind(Locus=rep(i,dim(sig.df)[1]),sig.df)
+      out.df <- rbind(out.df,sig.df)
+    }
+  }  
+  # Fill in missing information with ensgene lookup in annotable 
+  pb <- txtProgressBar(min=0,max=dim(out.df)[1],style=3)
+  for (i in 1:dim(out.df)[1]){
+    setTxtProgressBar(pb,i)
+    eid <- out.df$ensid[i]; chromo <- out.df$chrom[i]
+    if (is.na(chromo)==TRUE){
+      sub.df <- filter(grch37,ensgene==eid)
+      if (dim(sub.df)[1]>0){
+        out.df$chrom[i] <- "chr"%&%sub.df$chr[1]
+        out.df$tx.start[i] <- sub.df$start[1] 
+        out.df$tx.end[i] <- sub.df$end[1]
+      }
+    }
+  }
+  return(out.df)
+
+}
+
+
+
 ```
+
+
+# Step 2-4 functions 
+
+```{r}
+
+step2 <- function(df){ # df is sig df with appended features  
+  print("Performing Step 2...")
+  num.pairs <- dim(df)[1]
+  bonfer <- 0.05 / num.pairs   
+  print("Bonferroni threshold: p <= " %&% bonfer)  
+  sub.df <- filter(df,pred.perf.pvalue<=bonfer)
+  print("Number of associations before filtering: " %&% dim(df)[1])
+  print("Number of associations after filtering: " %&% dim(sub.df)[1])
+  return(sub.df)
+}
+
+step3 <- function(df,ph3.thresh=0.5){ # df is output from step2 
+  print("Performing Step 3...")
+  sub.df <- filter(df,ph3>=ph3.thresh)
+  print("Number of associations before filtering: " %&% dim(df)[1])
+  print("Number of associations after filtering: " %&% dim(sub.df)[1])
+  return(sub.df)
+}
+
+step4 <- function(df,ph4.thresh=0.5){ # df is output from step 3 
+  print("Performing Step 4...")
+  sub.df <- filter(df,ph4>=ph4.thresh)
+  print("Number of associations before filtering: " %&% dim(df)[1])
+  print("Number of associations after filtering: " %&% dim(sub.df)[1])
+  return(sub.df)
+}
+
+
+```
+
+
+# Perform analysis 
+
+```{r}
+
+gtex.locsig.df <- build_siggene_results()
+
+write.table(x=gtex.locsig.df,file=save.dir%&%"gtex-only.locus-results.txt",
+            sep="\t",quote=FALSE,row.names=FALSE)
+
+saveRDS(object=gtex.locsig.df,file=rds.dir%&%"gtex.locsig.df.RDS")
+
+step2.df <- step2(gtex.locsig.df)
+
+#[1] "Performing Step 2..."
+#[1] "Bonferroni threshold: p <= 0.000271739130434783"
+#[1] "Number of associations before filtering: 184"
+#[1] "Number of associations after filtering: 109"
+
+step3.df <- step3(step2.df)
+
+#[1] "Performing Step 3..."
+#[1] "Number of associations before filtering: 109"
+#[1] "Number of associations after filtering: 22"
+
+step4.df <- step4(step3.df,ph4.thresh=0.01)
+
+#[1] "Performing Step 4..."
+#[1] "Number of associations before filtering: 22"
+#[1] "Number of associations after filtering: 0"
+
+```
+
 
